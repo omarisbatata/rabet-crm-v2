@@ -1,5 +1,37 @@
 # Rabet CRM — Project Context
 
+## Current status (fully live)
+
+Everything below is built, deployed, and verified — this isn't a plan, it's what exists right now.
+
+- **App:** https://omarisbatata.github.io/rabet-crm-v2/ (GitHub Pages, repo `omarisbatata/rabet-crm-v2`)
+- **Supabase project:** `jpzplchcwtpihxfqdrlo` ("rabet-crm-v2", Frankfurt/eu-central-1)
+- **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
+  `0002_viewer_role.sql`). Access-test matrix passing 46/46 (`supabase/tests/access-matrix.mjs`).
+- **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
+  deployed — both verified working end-to-end (12 real emails synced on first run).
+- **Team roster (live accounts):**
+  - Omar — owner — `oshalak@hotmail.com`
+  - Luqman — teammate — `luqman.elmaddah@gmail.com`
+  - Usef — teammate — `usef.sadat@hotmail.com`
+  - Obada Samman — teammate — `obada.samman@hotmail.com`
+  - Shared **viewer** (checkup-only, no add/edit/delete, enforced by RLS not just UI) — used by
+    Taim Kiwan and Taim Al Saadi together — `admin@rabet-crm.local`
+  - All teammate/owner passwords were set directly via the admin API (no invite emails needed
+    after the first one); credentials were emailed to each person via the CRM's own send-email
+    function.
+- **Secrets:** local machine only, in `.env.local` (gitignored, never committed) — Supabase access
+  token, DB password, project ref, anon key, service_role key, Gmail app password. Also set as a
+  **GitHub Actions secret** (`SUPABASE_SERVICE_ROLE_KEY`, `GMAIL_APP_PASSWORD` on the repo) and a
+  **Supabase Edge Function secret** (`GMAIL_APP_PASSWORD`).
+- **Old project status:** the old Supabase project `uirdvnhafmuqtcsobyhr` was **paused** (not
+  deleted) to free a free-tier project slot for this rebuild — explicitly requested by Omar,
+  reversible any time from the Supabase dashboard. The old `rabet-crm-web` repo is untouched.
+- **Known deviation from the original stack line below:** actually hosted on GitHub Pages, not
+  Vercel — Cloudflare/Vercel were never wired up. Update this if that changes.
+
+---
+
 Full rebuild of `rabet-crm-web` (old repo + old Supabase project `uirdvnhafmuqtcsobyhr` are both
 left untouched, archived separately — not touched by this project). The old build had RLS enabled
 with zero policies, gated entirely through hand-rolled `crm_*` security-definer functions and a
@@ -16,8 +48,9 @@ checkup-only access — no add/edit, select only. No public signup; Omar invites
 Supabase dashboard (Auth → Users → Invite); the shared viewer account was created directly with a
 password set (no invite email, since it's shared rather than tied to one person's inbox).
 
-**Stack:** Supabase (new project — not reusing the old one) + Vercel + GitHub + Cloudflare, same
-as before.
+**Stack:** Supabase (new project — not reusing the old one) + GitHub (repo, Actions, Pages). The
+original plan carried over Vercel + Cloudflare from the old stack, but the app ended up hosted on
+GitHub Pages instead — Vercel and Cloudflare were never actually used in this rebuild.
 
 ---
 
@@ -330,7 +363,8 @@ is not used.
 1. New Supabase project (Frankfurt, matching the old one's region for latency).
 2. Run the schema above in the SQL Editor — auth, profiles trigger, all 4 tables, all RLS
    policies, in one pass (not schema-then-RLS-later).
-3. Create the 3 auth users via dashboard invite; set Omar's `profiles.role = 'owner'` manually.
+3. Create auth users (dashboard invite, or admin API for direct-password/no-email accounts like
+   the shared viewer login); set each `profiles.role` manually as needed.
 4. Write and run the access test matrix above against the live project. Nothing proceeds until
    every cell matches.
 5. Port inbound Gmail sync (GitHub Actions workflow + `sync-emails.mjs`), point at the new
