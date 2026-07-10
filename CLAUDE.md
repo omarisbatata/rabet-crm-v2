@@ -10,8 +10,11 @@ below) — not a default, a considered replacement.
 
 **Scope decision:** this CRM is the **primary data store** for CRM data. Not a layer over Notion.
 
-**Team:** 3 people — Omar (owner), Taim Kiwan (teammate), Taim Al Saadi (teammate). No public
-signup; Omar creates accounts via the Supabase dashboard (Auth → Users → Invite).
+**Team:** Omar (owner), Luqman and Usef and Obada Samman (teammate — full read/write), plus a
+shared **viewer** account (`admin@rabet-crm.local`) used by Taim Kiwan and Taim Al Saadi for
+checkup-only access — no add/edit, select only. No public signup; Omar invites teammates via the
+Supabase dashboard (Auth → Users → Invite); the shared viewer account was created directly with a
+password set (no invite email, since it's shared rather than tied to one person's inbox).
 
 **Stack:** Supabase (new project — not reusing the old one) + Vercel + GitHub + Cloudflare, same
 as before.
@@ -26,8 +29,13 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
   via `supabase-js`'s built-in auth, which issues a JWT. Every RLS policy below reads
   `auth.uid()` / `auth.role()` from that JWT — no custom verification function needed.
 - A `public.profiles` table (1:1 with `auth.users`) carries app-specific fields: display name and
-  `role` (`'owner' | 'teammate'`). A trigger creates the profile row automatically when a new
-  `auth.users` row is inserted (i.e., when Omar invites someone).
+  `role` (`'owner' | 'teammate' | 'viewer'`). A trigger creates the profile row automatically when
+  a new `auth.users` row is inserted (i.e., when Omar invites someone).
+- `viewer` is a read-only role added for shared/checkup-only accounts: select is allowed
+  everywhere authenticated is, but insert/update on `companies`, `emails`, and `templates`
+  additionally require the caller's profile role to be `owner` or `teammate` (see migration
+  `0002_viewer_role.sql`). Delete was already owner-only and needed no change. The app also hides
+  Add/Edit/Delete/Compose UI for viewers, but RLS is the actual enforcement, not the UI.
 - **Role changes are manual SQL only** — never exposed through the app or any RLS `update` policy.
   With 3 people total, this isn't worth automating and it closes off any self-escalation path.
 - `anon` (logged-out) gets zero access anywhere. RLS is enabled with no anon-targeting policy on
@@ -36,6 +44,12 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
 ---
 
 ## Schema + RLS (per table, not bolted on after)
+
+The block below is the original launch schema (`0001_init.sql`). It has since been extended by
+`supabase/migrations/0002a_add_viewer_value.sql` and `0002_viewer_role.sql` (adds the `viewer`
+role and tightens `companies`/`emails`/`templates` insert+update policies — see Auth model above).
+The `supabase/migrations/` directory is the authoritative current state; this block is kept for
+the original per-table rationale, not as a byte-for-byte mirror of the live schema.
 
 ```sql
 -- ═══════════════════════════════════════════════════════════════════
@@ -266,21 +280,25 @@ revoke all on public.templates from anon;
 
 ## Access test matrix (run before any UI is built)
 
-Every cell below must be verified against the live project — as `owner`, as `teammate`, and as
-`anon` — using three separate Supabase clients (owner JWT, teammate JWT, bare anon key). Expected
+Every cell below must be verified against the live project — as `owner`, `teammate`, `viewer`, and
+`anon` — using separate Supabase clients (owner/teammate/viewer JWT, bare anon key). Expected
 results:
 
-| Table      | anon (select/insert/update/delete) | teammate (select/insert/update/delete) | owner (select/insert/update/delete) |
-|------------|-------------------------------------|------------------------------------------|----------------------------------------|
-| profiles   | deny / deny / deny / deny           | allow / deny¹ / own-row-only² / deny     | allow / deny¹ / own-row-only² / deny   |
-| companies  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / allow / allow / allow          |
-| emails     | deny / deny / deny / deny           | allow / allow (outbound only) / allow / **deny** | allow / allow / allow / allow  |
-| templates  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / allow / allow / allow          |
+| Table      | anon (select/insert/update/delete) | teammate (select/insert/update/delete) | viewer (select/insert/update/delete) | owner (select/insert/update/delete) |
+|------------|-------------------------------------|------------------------------------------|----------------------------------------|----------------------------------------|
+| profiles   | deny / deny / deny / deny           | allow / deny¹ / own-row-only² / deny     | allow / deny¹ / own-row-only² / deny   | allow / deny¹ / own-row-only² / deny   |
+| companies  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          |
+| emails     | deny / deny / deny / deny           | allow / allow (outbound only) / allow / **deny** | allow / **deny** / **deny** / deny | allow / allow / allow / allow  |
+| templates  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          |
 
-¹ insert has no client-facing policy at all (trigger-only path) — both roles should get denied.
-² a teammate/owner can update their own `full_name` but an attempt to change their own `role`
-column must be rejected by the `with check` clause — test this explicitly, not just "update
+¹ insert has no client-facing policy at all (trigger-only path) — all roles should get denied.
+² a teammate/owner/viewer can update their own `full_name` but an attempt to change their own
+`role` column must be rejected by the `with check` clause — test this explicitly, not just "update
 succeeds/fails" as a whole.
+
+Implemented and passing (46/46) in `supabase/tests/access-matrix.mjs` — mints real sessions via
+admin `generate_link` (magiclink) + verify, no passwords touched, so it never interferes with a
+pending invite/recovery link.
 
 Write this as an actual test script (Node or Deno, using `@supabase/supabase-js` three times with
 three different auth contexts) before any UI code — per the build order below.
