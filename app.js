@@ -261,6 +261,7 @@ function initialsFor(name) {
 }
 
 function isOwner() { return state.user?.role === 'owner' }
+function isViewer() { return state.user?.role === 'viewer' }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -599,17 +600,18 @@ function renderTemplates(editingId) {
           <div class="template-row-name">${esc(tpl.name)}</div>
           <div class="template-row-cat">${esc(tpl.category)}</div>
         </div>
+        ${isViewer() ? '' : `
         <div class="template-row-actions">
           <button data-act="edit">${t('edit')}</button>
           <button data-act="delete">${t('delete')}</button>
-        </div>
+        </div>`}
       </div>
     `).join('')
     : `<div class="field-hint">${t('templates_empty')}</div>`
 
   body.innerHTML = `
     <div class="template-list">${listHtml}</div>
-    <button class="btn-ghost" id="btn-template-new" style="width:auto;padding:8px 14px;">${t('template_new')}</button>
+    ${isViewer() ? '' : `<button class="btn-ghost" id="btn-template-new" style="width:auto;padding:8px 14px;">${t('template_new')}</button>
     <div id="template-form" class="field-group hidden" style="margin-top:16px;">
       <label class="field-label">${t('template_category')}</label>
       <input class="field-input" id="tpl-category" value="${esc(editing?.category || '')}" />
@@ -623,8 +625,10 @@ function renderTemplates(editingId) {
         <button class="btn-primary" id="btn-template-save">${t('save')}</button>
         <button class="btn-ghost" id="btn-template-cancel">${t('cancel')}</button>
       </div>
-    </div>
+    </div>`}
   `
+
+  if (isViewer()) return
 
   const form = qs('#template-form')
   if (editing !== null) form.classList.remove('hidden')
@@ -807,6 +811,7 @@ function buildSidebar() {
   })
 
   qs('#sb-user').textContent = state.user?.full_name || ''
+  qs('#btn-add').classList.toggle('hidden', isViewer())
   qs('#btn-add').onclick      = () => showModal(null)
   qs('#btn-inbox').classList.toggle('hidden', !isOwner())
   qs('#btn-inbox').onclick    = showInbox
@@ -838,6 +843,8 @@ function buildTopbar() {
     showModal(c)
   }
   qs('#btn-delete').onclick = handleDelete
+  qs('#btn-edit').classList.toggle('hidden', isViewer())
+  qs('#btn-delete').classList.toggle('hidden', isViewer())
 }
 
 function setupKeyboard() {
@@ -846,12 +853,12 @@ function setupKeyboard() {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (!qs('#modal-overlay').classList.contains('hidden') ||
         !qs('#settings-overlay').classList.contains('hidden')) return
-    if (e.key === 'n' || e.key === 'N') showModal(null)
+    if ((e.key === 'n' || e.key === 'N') && !isViewer()) showModal(null)
     if (e.key === 'e' || e.key === 'E') {
       const c = state.companies.find(x => x.id === state.selected)
       if (c) showModal(c)
     }
-    if (e.key === 'Delete') handleDelete()
+    if (e.key === 'Delete' && !isViewer()) handleDelete()
     if (e.ctrlKey && e.key === 'f') { e.preventDefault(); qs('#search-input').focus() }
     if (e.key === 'Escape') { qs('#search-input').value = ''; state.filters.query = ''; renderTable() }
   })
@@ -1031,9 +1038,20 @@ function showModal(company) {
   overlay.classList.remove('hidden')
   qs('#f-name').focus()
 
+  if (isViewer()) {
+    qsa('#modal-body input, #modal-body select, #modal-body textarea, #modal-body button.pill-btn, #modal-body button.status-pill')
+      .forEach(elm => { elm.disabled = true })
+    qs('#btn-modal-save').classList.add('hidden')
+  }
+
   if (company) {
     loadCompanyEmails(company.id)
     loadTemplates()
+
+    if (isViewer()) {
+      qs('#btn-compose-toggle').classList.add('hidden')
+      return
+    }
 
     qs('#btn-compose-toggle').addEventListener('click', () => {
       qs('#compose-box').classList.toggle('hidden')
@@ -1078,6 +1096,7 @@ qs('#modal-overlay').addEventListener('click', e => { if (e.target === qs('#moda
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 async function handleDelete() {
+  if (isViewer()) return
   if (!state.selected) { sbar(t('no_selection')); return }
   if (!confirm(t('confirm_delete'))) return
   await removeCompany(state.selected)
@@ -1086,6 +1105,7 @@ async function handleDelete() {
 
 // ── Context Menu ──────────────────────────────────────────────────────────────
 function showCtxMenu(e, company) {
+  if (isViewer()) return
   const menu  = qs('#ctx-menu')
   const scfg  = state.lang === 'ar' ? STAGE_AR : STAGE_EN
   menu.innerHTML = ''
