@@ -29,6 +29,7 @@ const BASE    = `https://${REF}.supabase.co`
 
 const OWNER_EMAIL    = 'oshalak@hotmail.com'
 const TEAMMATE_EMAIL = 'luqman.elmaddah@gmail.com'
+const VIEWER_EMAIL   = 'admin@rabet-crm.local'
 
 let pass = 0, fail = 0
 function check(label, expected, actual, detail = '') {
@@ -66,12 +67,13 @@ async function rest(tableAndQuery, { method = 'GET', token, body } = {}) {
 }
 
 async function main() {
-  console.log('Minting owner + teammate sessions...')
+  console.log('Minting owner + teammate + viewer sessions...')
   const owner    = await mintSession(OWNER_EMAIL)
   const teammate = await mintSession(TEAMMATE_EMAIL)
-  console.log(`owner=${owner.userId} teammate=${teammate.userId}\n`)
+  const viewer   = await mintSession(VIEWER_EMAIL)
+  console.log(`owner=${owner.userId} teammate=${teammate.userId} viewer=${viewer.userId}\n`)
 
-  const roles = { anon: { token: null }, teammate, owner }
+  const roles = { anon: { token: null }, teammate, owner, viewer }
 
   // ── profiles ────────────────────────────────────────────────────────────
   console.log('\n--- profiles ---')
@@ -123,9 +125,17 @@ async function main() {
     const res = await rest('companies', { method: 'POST', token: null, body: { name: 'Access Test Co (anon)' } })
     check('companies insert denied (anon)', true, !res.ok)
   }
+  {
+    const res = await rest('companies', { method: 'POST', token: viewer.token, body: { name: 'Access Test Co (viewer)' } })
+    check('companies insert denied (viewer)', true, !res.ok || res.rowCount === 0)
+  }
   if (teammateCompanyId) {
     const res = await rest(`companies?id=eq.${teammateCompanyId}`, { method: 'PATCH', token: teammate.token, body: { stage: 'contacted' } })
     check('companies update (teammate)', true, res.ok)
+  }
+  if (teammateCompanyId) {
+    const res = await rest(`companies?id=eq.${teammateCompanyId}`, { method: 'PATCH', token: viewer.token, body: { stage: 'meeting_set' } })
+    check('companies update denied (viewer)', true, res.rowCount === 0)
   }
   if (teammateCompanyId) {
     const res = await rest(`companies?id=eq.${teammateCompanyId}`, { method: 'DELETE', token: teammate.token })
@@ -166,9 +176,20 @@ async function main() {
     const res = await rest('emails', { method: 'POST', token: null, body: { gmail_message_id: `test-anon-${Date.now()}`, direction: 'outbound' } })
     check('emails insert denied (anon)', true, !res.ok)
   }
+  {
+    const res = await rest('emails', {
+      method: 'POST', token: viewer.token,
+      body: { gmail_message_id: `test-viewer-${Date.now()}`, direction: 'outbound', to_addresses: 'x@example.com' },
+    })
+    check('emails insert denied (viewer)', true, !res.ok || res.rowCount === 0)
+  }
   if (emailId) {
     const res = await rest(`emails?id=eq.${emailId}`, { method: 'PATCH', token: teammate.token, body: { subject: 'updated' } })
     check('emails update (teammate)', true, res.ok)
+  }
+  if (emailId) {
+    const res = await rest(`emails?id=eq.${emailId}`, { method: 'PATCH', token: viewer.token, body: { subject: 'viewer edit' } })
+    check('emails update denied (viewer)', true, res.rowCount === 0)
   }
   if (emailId) {
     const res = await rest(`emails?id=eq.${emailId}`, { method: 'DELETE', token: teammate.token })
@@ -196,9 +217,17 @@ async function main() {
     const res = await rest('templates', { method: 'POST', token: null, body: { category: 'test', name: 'Access Test Template (anon)' } })
     check('templates insert denied (anon)', true, !res.ok)
   }
+  {
+    const res = await rest('templates', { method: 'POST', token: viewer.token, body: { category: 'test', name: 'Access Test Template (viewer)' } })
+    check('templates insert denied (viewer)', true, !res.ok || res.rowCount === 0)
+  }
   if (templateId) {
     const res = await rest(`templates?id=eq.${templateId}`, { method: 'PATCH', token: teammate.token, body: { name: 'Access Test Template (edited)' } })
     check('templates update (teammate)', true, res.ok)
+  }
+  if (templateId) {
+    const res = await rest(`templates?id=eq.${templateId}`, { method: 'PATCH', token: viewer.token, body: { name: 'viewer edit' } })
+    check('templates update denied (viewer)', true, res.rowCount === 0)
   }
   if (templateId) {
     const res = await rest(`templates?id=eq.${templateId}`, { method: 'DELETE', token: teammate.token })
