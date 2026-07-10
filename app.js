@@ -355,10 +355,10 @@ async function bootApp() {
   applyLang()
   setupKeyboard()
   await loadCompanies()
-  await refreshInboxBadge()
+  if (isOwner()) await refreshInboxBadge()
   // Realtime isn't wired up (RLS-aware realtime is more moving parts than this
   // 3-person team needs) — poll for changes made by other team members instead.
-  setInterval(() => { loadCompanies(true); refreshInboxBadge() }, 15000)
+  setInterval(() => { loadCompanies(true); if (isOwner()) refreshInboxBadge() }, 15000)
 }
 
 async function loadProfiles() {
@@ -808,6 +808,7 @@ function buildSidebar() {
 
   qs('#sb-user').textContent = state.user?.full_name || ''
   qs('#btn-add').onclick      = () => showModal(null)
+  qs('#btn-inbox').classList.toggle('hidden', !isOwner())
   qs('#btn-inbox').onclick    = showInbox
   qs('#btn-export').onclick   = exportCSV
   qs('#btn-settings').onclick = showSettings

@@ -347,7 +347,7 @@ tbody td.col-status { white-space: nowrap; }
 #sbar-msg { font-size: 12px; color: var(--muted); }
 
 /* ── Modal ──────────────────────────────────────────────────────────────────── */
-#modal-overlay, #settings-overlay {
+#modal-overlay, #settings-overlay, #templates-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,.65);
   display: flex; align-items: center; justify-content: center;
@@ -442,14 +442,33 @@ tbody td.col-status { white-space: nowrap; }
 .status-pill:hover { opacity: .85; }
 .status-pill.active { border-color: currentColor !important; opacity: 1; }
 
-/* ── Inbox ──────────────────────────────────────────────────────────────── */
-.inbox-card {
-  width: 900px; max-width: 95vw; height: 80vh;
-  display: flex; flex-direction: column;
+/* ── Inbox (right-side sliding panel, not a centered modal) ────────────────── */
+#inbox-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex; justify-content: flex-end;
+  z-index: 50;
+  animation: fade-in .15s ease;
 }
+.inbox-card {
+  width: 620px; max-width: 92vw; height: 100vh; max-height: 100vh;
+  border-radius: 0;
+  display: flex; flex-direction: column;
+  animation: slide-in-right .2s ease;
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+[dir="rtl"] #inbox-overlay { justify-content: flex-start; }
+[dir="rtl"] .inbox-card { animation-name: slide-in-left; }
 .inbox-body { flex: 1; display: flex; overflow: hidden; }
 .inbox-list {
-  width: 300px; flex-shrink: 0; overflow-y: auto;
+  width: 240px; flex-shrink: 0; overflow-y: auto;
   border-right: 1px solid var(--border);
 }
 .inbox-item {
