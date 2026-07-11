@@ -8,8 +8,27 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **Supabase project:** `jpzplchcwtpihxfqdrlo` ("rabet-crm-v2", Frankfurt/eu-central-1)
 - **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
   `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`,
-  `0004_add_income_type.sql`). Access-test matrix passing 66/66 (`supabase/tests/access-matrix.mjs`,
-  unaffected by 0004 since it only widens the `entry_type` check constraint, no RLS change).
+  `0004_add_income_type.sql`, `0005_attendance_and_login_sessions.sql`,
+  `0006_finance_company_link.sql`). Access-test matrix passing 66/66 (`supabase/tests/access-matrix.mjs`,
+  not yet extended for the two new tables — see "Known gap" below).
+- **Attendance + login-session tracking (owner-only), and a per-client finance breakdown:**
+  - `attendance_entries` — manual sign-in/sign-out log entered by the owner via the new Dashboard page.
+    Owner-only for every operation (select/insert/update/delete); nobody else, including the person
+    the entry is about, can read it.
+  - `login_sessions` — auto-tracked CRM usage. `app.js` inserts a row on first login (or resumes the
+    existing one if the last heartbeat was under 15 min ago) and updates `last_heartbeat_at` every
+    ~4 min while the tab is open (`ensureLoginSession`/`sendHeartbeat`/`startHeartbeatLoop`). A user
+    can only see/insert/update their own rows; only `owner` can select all of them.
+  - `finance_entries.company_id` — nullable FK to `companies`, added so the Dashboard's finance panel
+    can break totals down by real CRM client (mainly used on `income` rows).
+  - **Dashboard page** (`dashboard.html` + `dashboard.js`) — new standalone owner-only page, same
+    gating pattern as `finance.html` (redirect to `index.html` if no session or `role !== 'owner'`,
+    since this page has a real URL). Two tabs: Overview (finance totals + by-client breakdown, and a
+    side-by-side hours panel — manual attendance hours vs. CRM login hours, both per person) and
+    Attendance (the manual sign-in/sign-out CRUD for `attendance_entries`).
+  - **Known gap:** `supabase/tests/access-matrix.mjs` has not been extended to cover
+    `attendance_entries` or `login_sessions` yet — do this before treating those RLS policies as
+    verified, same as every other table in this project.
 - **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
   deployed — both verified working end-to-end (12 real emails synced on first run).
 - **Team roster (live accounts):**
@@ -27,6 +46,12 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   token, DB password, project ref, anon key, service_role key, Gmail app password. Also set as a
   **GitHub Actions secret** (`SUPABASE_SERVICE_ROLE_KEY`, `GMAIL_APP_PASSWORD` on the repo) and a
   **Supabase Edge Function secret** (`GMAIL_APP_PASSWORD`).
+- **Applying migrations from this machine:** direct Postgres connections (port 5432/6543, both
+  direct and pooler) are unreachable from this sandbox — `supabase db push` fails with a connection
+  timeout/DNS error. What does work: the Supabase **Management API** over HTTPS
+  (`https://api.supabase.com/v1/projects/{ref}/database/query`, `Authorization: Bearer
+  $SUPABASE_ACCESS_TOKEN`), which runs arbitrary SQL against the live project and was used to apply
+  `0005`/`0006`. Prefer that path over `db push` here.
 - **Old project status:** the old Supabase project `uirdvnhafmuqtcsobyhr` was **paused** (not
   deleted) to free a free-tier project slot for this rebuild — explicitly requested by Omar,
   reversible any time from the Supabase dashboard. The old `rabet-crm-web` repo is untouched.

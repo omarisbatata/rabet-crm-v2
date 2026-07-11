@@ -79,6 +79,7 @@
       </button>
       <button class="nav-btn" id="btn-templates" data-i18n="templates_nav"></button>
       <button class="nav-btn hidden" id="btn-finance" data-i18n="finance_nav"></button>
+      <button class="nav-btn hidden" id="btn-dashboard" data-i18n="dashboard_nav"></button>
       <button class="nav-btn" id="btn-export"   data-i18n="export"></button>
       <button class="nav-btn" id="btn-settings" data-i18n="settings"></button>
       <button class="nav-btn nav-btn-dim" id="btn-lang"></button>
@@ -128,6 +129,17 @@
       <button class="modal-close" id="modal-close">✕</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Company View Overlay (read-only, opened by a single click) ─────────── -->
+<div id="view-overlay" class="hidden">
+  <div class="modal-card view-card">
+    <div class="modal-header">
+      <span id="view-title"></span>
+      <button class="modal-close" id="view-close">✕</button>
+    </div>
+    <div class="modal-body" id="view-body"></div>
   </div>
 </div>
 

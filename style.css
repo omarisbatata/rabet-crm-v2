@@ -530,11 +530,35 @@ tbody td.col-status { white-space: nowrap; }
 .compose-box .field-input, .compose-box .field-textarea { margin-bottom: 8px; }
 .compose-box .field-textarea { min-height: 90px; }
 
+/* ── Company View Overlay (read-only) ──────────────────────────────────── */
+.view-card { width: 460px; }
+.view-row {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.view-row:last-child { border-bottom: none; }
+.view-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+  flex-shrink: 0; padding-top: 2px;
+}
+.view-value {
+  font-size: 13px; color: var(--text);
+  text-align: right; max-width: 60%; word-break: break-word;
+}
+[dir="rtl"] .view-value { text-align: left; }
+.view-row.view-notes { flex-direction: column; gap: 6px; }
+.view-value-block {
+  font-size: 13px; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+}
+
 /* ── Templates ──────────────────────────────────────────────────────────── */
 .templates-card { width: 640px; max-width: 95vw; }
 
 /* ── Finance page (standalone tab, not a modal) ──────────────────────────── */
-#finance-page {
+#finance-page, #dashboard-page {
   height: 100%; overflow-y: auto;
   max-width: 1100px; margin: 0 auto;
   padding: 28px 32px 40px;
@@ -551,6 +575,61 @@ tbody td.col-status { white-space: nowrap; }
   display: flex; align-items: center; justify-content: center;
   flex: 1; color: var(--muted); font-size: 14px; text-align: center;
 }
+
+/* ── Dashboard page ───────────────────────────────────────────────────────── */
+.db-tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+.db-tab {
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-size: 13px; font-weight: 500;
+  transition: all .12s;
+}
+.db-tab:hover { color: var(--text); }
+.db-tab.active { color: var(--accent2); border-color: var(--accent); background: rgba(124,106,247,.12); }
+.db-range { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+.db-range .field-input { margin-bottom: 0; width: auto; }
+.db-section-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin: 22px 0 10px;
+}
+.db-section-title:first-child { margin-top: 0; }
+.db-hours-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+@media (max-width: 720px) { .db-hours-grid { grid-template-columns: 1fr; } }
+.db-hours-panel {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); padding: 12px 14px;
+}
+.db-hours-panel-title {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px;
+}
+.db-hours-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.db-hours-row:last-child { border-bottom: none; }
+.db-hours-name { color: var(--text); }
+.db-hours-val { color: var(--accent2); font-weight: 600; }
+.db-client-table-wrap, .db-attendance-table-wrap {
+  max-height: 40vh; overflow: auto; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); margin-bottom: 16px;
+}
+.db-client-table, .db-attendance-table { width: 100%; border-collapse: collapse; }
+.db-client-table th, .db-attendance-table th {
+  background: var(--panel); color: var(--muted);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0;
+}
+.db-client-table td, .db-attendance-table td {
+  padding: 9px 12px; font-size: 13px; border-bottom: 1px solid var(--border);
+}
+.db-attendance-row-actions { display: flex; gap: 6px; }
+.db-attendance-row-actions button {
+  background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer;
+}
+.db-attendance-row-actions button:hover { color: var(--text); }
 .finance-totals {
   display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
 }

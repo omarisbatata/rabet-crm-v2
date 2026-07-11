@@ -127,6 +127,7 @@ en: {
   template_use: 'Use…',
   template_delete_confirm: 'Delete this template?',
   finance_nav: '$ Finance',
+  dashboard_nav: '◆ Dashboard',
 },
 ar: {
   login_title: 'تسجيل الدخول',
@@ -212,6 +213,7 @@ ar: {
   template_use: 'استخدام…',
   template_delete_confirm: 'حذف هذا القالب؟',
   finance_nav: '$ المالية',
+  dashboard_nav: '◆ لوحة التحكم',
 },
 }
 
@@ -344,6 +346,7 @@ async function afterLogin() {
 }
 
 function logout() {
+  stopHeartbeatLoop()
   sb.auth.signOut()
   state.user = null
   state.companies = []
@@ -361,9 +364,67 @@ async function bootApp() {
   setupKeyboard()
   await loadCompanies()
   if (isOwner()) await refreshInboxBadge()
+  await ensureLoginSession()
+  startHeartbeatLoop()
   // Realtime isn't wired up (RLS-aware realtime is more moving parts than this
   // 3-person team needs) — poll for changes made by other team members instead.
   setInterval(() => { loadCompanies(true); if (isOwner()) refreshInboxBadge() }, 15000)
+}
+
+// ── Login session tracking (feeds the owner dashboard's CRM login hours) ────
+// Every signed-in user gets one login_sessions row per continuous stretch of
+// having the app open. A heartbeat every ~4 min keeps last_heartbeat_at fresh;
+// if the gap since the last heartbeat exceeds 15 min (tab closed, laptop
+// slept), the next boot starts a fresh row instead of resuming the old one —
+// so session duration (last_heartbeat_at - login_at) never silently spans a
+// period where the app wasn't actually open.
+const HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000
+const SESSION_GAP_MS        = 15 * 60 * 1000
+
+let currentSessionId = null
+let heartbeatTimer   = null
+
+function sessionStorageKey(userId) { return `crm_session_${userId}` }
+
+async function ensureLoginSession() {
+  const key = sessionStorageKey(state.user.id)
+  let stored = null
+  try { stored = JSON.parse(localStorage.getItem(key) || 'null') } catch { stored = null }
+  const now = Date.now()
+
+  if (stored?.id && (now - stored.lastHeartbeat) < SESSION_GAP_MS) {
+    currentSessionId = stored.id
+    await sendHeartbeat()
+    return
+  }
+
+  const { data, error } = await sb.from('login_sessions')
+    .insert({ user_id: state.user.id })
+    .select('id')
+    .single()
+  if (error || !data) return
+  currentSessionId = data.id
+  localStorage.setItem(key, JSON.stringify({ id: currentSessionId, lastHeartbeat: now }))
+}
+
+async function sendHeartbeat() {
+  if (!currentSessionId) return
+  const { error } = await sb.from('login_sessions')
+    .update({ last_heartbeat_at: new Date().toISOString() })
+    .eq('id', currentSessionId)
+  if (error) return
+  localStorage.setItem(sessionStorageKey(state.user.id), JSON.stringify({ id: currentSessionId, lastHeartbeat: Date.now() }))
+}
+
+function startHeartbeatLoop() {
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
+}
+
+function stopHeartbeatLoop() {
+  clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+  currentSessionId = null
 }
 
 async function loadProfiles() {
@@ -738,7 +799,7 @@ function renderTable() {
       <td>${(c.updated_at||'').slice(0,16).replace('T',' ')}</td>
       <td title="${esc(c.notes)}">${esc(c.notes)}</td>
     `
-    tr.addEventListener('click', () => selectRow(c.id))
+    tr.addEventListener('click', () => { selectRow(c.id); showViewOverlay(c) })
     tr.addEventListener('dblclick', () => { selectRow(c.id); showModal(c) })
     tr.addEventListener('contextmenu', e => { e.preventDefault(); selectRow(c.id); showCtxMenu(e, c) })
     tbody.appendChild(tr)
@@ -821,6 +882,8 @@ function buildSidebar() {
   qs('#btn-inbox').onclick    = showInbox
   qs('#btn-finance').classList.toggle('hidden', !canSeeFinance())
   qs('#btn-finance').onclick  = () => window.open('finance.html', '_blank')
+  qs('#btn-dashboard').classList.toggle('hidden', !isOwner())
+  qs('#btn-dashboard').onclick = () => window.open('dashboard.html', '_blank')
   qs('#btn-export').onclick   = exportCSV
   qs('#btn-settings').onclick = showSettings
   qs('#btn-lang').textContent = t('lang_switch')
@@ -858,7 +921,8 @@ function setupKeyboard() {
     const tag = document.activeElement.tagName
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (!qs('#modal-overlay').classList.contains('hidden') ||
-        !qs('#settings-overlay').classList.contains('hidden')) return
+        !qs('#settings-overlay').classList.contains('hidden') ||
+        !qs('#view-overlay').classList.contains('hidden')) return
     if ((e.key === 'n' || e.key === 'N') && !isViewer()) showModal(null)
     if (e.key === 'e' || e.key === 'E') {
       const c = state.companies.find(x => x.id === state.selected)
@@ -912,6 +976,7 @@ function setSort(col) {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function showModal(company) {
+  hideViewOverlay()
   state.editingId = company?.id || null
   const overlay   = qs('#modal-overlay')
   const body      = qs('#modal-body')
@@ -1099,6 +1164,41 @@ function hideModal() {
 
 qs('#modal-close').addEventListener('click', hideModal)
 qs('#modal-overlay').addEventListener('click', e => { if (e.target === qs('#modal-overlay')) hideModal() })
+
+// ── View Overlay (read-only, opened by a single click on a row) ──────────────
+function showViewOverlay(company) {
+  hideModal()
+  const scfg = state.lang === 'ar' ? STAGE_AR : STAGE_EN
+  const s = scfg[company.stage] || scfg.not_contacted
+  const assignedProfile = state.profileMap[company.assigned_to]
+  const modProfile      = state.profileMap[company.modified_by]
+  const contact = [company.contact_type, company.contact_value].filter(Boolean).join('  ')
+  const fuDate  = company.followup_at ? company.followup_at.slice(0, 10) : ''
+
+  qs('#view-title').textContent = company.name
+
+  qs('#view-body').innerHTML = `
+    <div class="view-row"><span class="view-label">${t('f_industry')}</span><span class="view-value">${esc(company.industry) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('f_contact_type')}</span><span class="view-value">${esc(contact) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('f_service')}</span><span class="view-value">${esc(company.service) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('f_status')}</span><span class="view-value"><span class="status-badge ${s.cls}">${s.label}</span></span></div>
+    <div class="view-row"><span class="view-label">${t('f_owner')}</span><span class="view-value">${esc(assignedProfile?.full_name) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('f_followup')}</span><span class="view-value">${esc(fuDate) || '—'}</span></div>
+    <div class="view-row view-notes"><span class="view-label">${t('f_notes')}</span><div class="view-value-block">${esc(company.notes) || '—'}</div></div>
+    <div class="view-row"><span class="view-label">${t('col_by')}</span><span class="view-value">${esc(modProfile?.full_name) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('col_updated')}</span><span class="view-value">${esc((company.updated_at||'').slice(0,16).replace('T',' '))}</span></div>
+  `
+
+  qs('#view-overlay').classList.remove('hidden')
+}
+
+function hideViewOverlay() {
+  qs('#view-overlay').classList.add('hidden')
+}
+
+qs('#view-close').addEventListener('click', hideViewOverlay)
+qs('#view-overlay').addEventListener('click', e => { if (e.target === qs('#view-overlay')) hideViewOverlay() })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideViewOverlay() })
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 async function handleDelete() {

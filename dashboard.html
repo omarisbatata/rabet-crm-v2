@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — رابط CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="dashboard-page">
+  <div class="finance-page-header">
+    <div class="finance-page-title" id="db-title"></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="nav-btn-dim" id="btn-db-lang" style="background:none;border:none;"></button>
+      <a class="btn-ghost" id="btn-db-back" href="index.html" style="width:auto;padding:8px 14px;text-decoration:none;display:inline-block;"></a>
+    </div>
+  </div>
+
+  <div class="finance-page-status" id="db-status"></div>
+
+  <div id="dashboard-body" class="hidden">
+    <div class="db-tabs">
+      <button class="db-tab active" id="db-tab-overview"></button>
+      <button class="db-tab" id="db-tab-attendance"></button>
+    </div>
+    <div id="db-overview"></div>
+    <div id="db-attendance" class="hidden"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
