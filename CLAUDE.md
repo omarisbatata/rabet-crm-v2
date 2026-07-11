@@ -9,8 +9,9 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
   `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`,
   `0004_add_income_type.sql`, `0005_attendance_and_login_sessions.sql`,
-  `0006_finance_company_link.sql`). Access-test matrix passing 66/66 (`supabase/tests/access-matrix.mjs`,
-  not yet extended for the two new tables — see "Known gap" below).
+  `0006_finance_company_link.sql`, `0007a_add_it_value.sql`, `0007_it_module.sql`). Access-test
+  matrix passing 66/66 (`supabase/tests/access-matrix.mjs`, not yet extended for any of the tables
+  added after it — see "Known gap" below).
 - **Attendance + login-session tracking (owner-only), and a per-client finance breakdown:**
   - `attendance_entries` — manual sign-in/sign-out log entered by the owner via the new Dashboard page.
     Owner-only for every operation (select/insert/update/delete); nobody else, including the person
@@ -29,6 +30,29 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   - **Known gap:** `supabase/tests/access-matrix.mjs` has not been extended to cover
     `attendance_entries` or `login_sessions` yet — do this before treating those RLS policies as
     verified, same as every other table in this project.
+- **IT module** — new `it` role (added the same two-step way as `viewer`/`accountant`: an
+  `ALTER TYPE ADD VALUE` migration committed alone before anything references it), scoped like
+  Finance/`accountant` — full access for `it`/`owner`, narrow self-service for everyone else:
+  - `it_assets` — infra/subscriptions, `it`/`owner` only, no employee access at all.
+  - `it_equipment` — `it`/`owner` full CRUD; an employee can `select` only rows where
+    `assigned_to = auth.uid()` (their own gear, read-only).
+  - `it_tickets` — `it`/`owner` see/manage everything; an employee can insert and can
+    select/update only rows where `created_by = auth.uid()`. `assigned_to` defaults to "the IT
+    person" via a `before insert` trigger (`default_it_ticket_assignee`) — Postgres doesn't allow a
+    subquery in a column `DEFAULT`, which is why this isn't just a `default (select ...)` like the
+    company/profile FKs elsewhere in this schema.
+  - `it_ticket_comments` — access inherits from the parent ticket (via an `exists` check against
+    `it_tickets`); append-only, no update/delete policy for anyone.
+  - `it_messages` — 1:1 chat, not group. `it`/`owner` can select every conversation; anyone else
+    only rows where they're `sender_id` or `recipient_id`. The recipient can `update` their own rows
+    (used to stamp `read_at`) — RLS grants the whole row, not just that column, same accepted
+    trade-off as `it_tickets_update_own` (see the migration file's comments).
+  - **Pages:** `it.html`/`it.js` — admin side (Assets/Equipment/Tickets/Chat tabs), gated to
+    `it`/`owner` with the same real-URL redirect pattern as `finance.html`/`dashboard.html`.
+    `ithelp.html`/`ithelp.js` — "Get IT Help" self-service side (My Tickets/Message IT/My
+    Equipment), open to any signed-in role, including `it`/`owner` themselves. Both poll every 12s
+    while their live-updating tab (tickets/chat) is active — same "no realtime, just poll" choice
+    already made for the main company list.
 - **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
   deployed — both verified working end-to-end (12 real emails synced on first run).
 - **Team roster (live accounts):**

@@ -679,6 +679,54 @@ tbody td.col-status { white-space: nowrap; }
 }
 .template-row-actions button:hover { color: var(--text); }
 
+/* ── IT module (assets/equipment tables share .db-client-table etc.) ────────── */
+.it-filters { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.it-filters .field-input, .it-filters .filter-select { margin-bottom: 0; width: auto; }
+.it-asset-soon    { color: var(--warn); font-weight: 600; }
+.it-asset-overdue { color: var(--danger); font-weight: 600; }
+.it-row-actions { display: flex; gap: 6px; }
+.it-row-actions button { background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+.it-row-actions button:hover { color: var(--text); }
+
+.it-panes {
+  display: flex; height: 60vh;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; margin-bottom: 16px;
+}
+.it-pane-list { width: 260px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
+.it-pane-detail { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; min-width: 0; }
+[dir="rtl"] .it-pane-list { border-right: none; border-left: 1px solid var(--border); }
+.it-list-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; }
+.it-list-item:hover { background: var(--surface); }
+.it-list-item.selected { background: rgba(124,106,247,.12); }
+.it-list-item-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.it-list-item-meta { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.it-unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent2); display: inline-block; }
+.it-empty { padding: 50px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.it-ticket-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.it-ticket-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.it-ticket-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.it-ticket-controls { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.it-ticket-controls .field-select { width: auto; margin-bottom: 0; }
+.it-ticket-desc { font-size: 13px; color: var(--text); white-space: pre-wrap; margin-bottom: 16px; }
+
+.it-thread { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.it-comment { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.it-comment-meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.it-comment-body { font-size: 13px; color: var(--text); white-space: pre-wrap; }
+
+.it-chat-msg { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 13px; white-space: pre-wrap; }
+.it-chat-msg.mine   { align-self: flex-end;   background: var(--accent); color: white; }
+.it-chat-msg.theirs { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.it-chat-time { font-size: 10px; color: var(--muted); margin-top: 4px; }
+[dir="rtl"] .it-chat-msg.mine   { align-self: flex-start; }
+[dir="rtl"] .it-chat-msg.theirs { align-self: flex-end; }
+
+.it-compose-row { display: flex; gap: 8px; align-items: flex-end; }
+.it-compose-row textarea { flex: 1; min-height: 44px; margin-bottom: 0; }
+.it-compose-row button { width: auto; padding: 9px 16px; margin-bottom: 0; }
+
 /* ── Context Menu ───────────────────────────────────────────────────────────── */
 #ctx-menu {
   position: fixed; z-index: 200;

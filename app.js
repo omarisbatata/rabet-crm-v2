@@ -128,6 +128,8 @@ en: {
   template_delete_confirm: 'Delete this template?',
   finance_nav: '$ Finance',
   dashboard_nav: '◆ Dashboard',
+  it_nav: '⚙ IT',
+  ithelp_nav: '? Get IT Help',
 },
 ar: {
   login_title: 'تسجيل الدخول',
@@ -214,6 +216,8 @@ ar: {
   template_delete_confirm: 'حذف هذا القالب؟',
   finance_nav: '$ المالية',
   dashboard_nav: '◆ لوحة التحكم',
+  it_nav: '⚙ تقنية المعلومات',
+  ithelp_nav: '? طلب مساعدة تقنية',
 },
 }
 
@@ -267,7 +271,9 @@ function initialsFor(name) {
 function isOwner() { return state.user?.role === 'owner' }
 function isViewer() { return state.user?.role === 'viewer' }
 function isAccountant() { return state.user?.role === 'accountant' }
+function isIT() { return state.user?.role === 'it' }
 function canSeeFinance() { return isOwner() || isAccountant() }
+function canSeeIT() { return isOwner() || isIT() }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
@@ -884,6 +890,9 @@ function buildSidebar() {
   qs('#btn-finance').onclick  = () => window.open('finance.html', '_blank')
   qs('#btn-dashboard').classList.toggle('hidden', !isOwner())
   qs('#btn-dashboard').onclick = () => window.open('dashboard.html', '_blank')
+  qs('#btn-it').classList.toggle('hidden', !canSeeIT())
+  qs('#btn-it').onclick      = () => window.open('it.html', '_blank')
+  qs('#btn-ithelp').onclick  = () => window.open('ithelp.html', '_blank')
   qs('#btn-export').onclick   = exportCSV
   qs('#btn-settings').onclick = showSettings
   qs('#btn-lang').textContent = t('lang_switch')

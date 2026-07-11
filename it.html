@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IT — رابط CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="dashboard-page">
+  <div class="finance-page-header">
+    <div class="finance-page-title" id="it-title"></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="nav-btn-dim" id="btn-it-lang" style="background:none;border:none;"></button>
+      <a class="btn-ghost" id="btn-it-back" href="index.html" style="width:auto;padding:8px 14px;text-decoration:none;display:inline-block;"></a>
+    </div>
+  </div>
+
+  <div class="finance-page-status" id="it-status"></div>
+
+  <div id="it-body" class="hidden">
+    <div class="db-tabs">
+      <button class="db-tab active" id="it-tab-assets"></button>
+      <button class="db-tab" id="it-tab-equipment"></button>
+      <button class="db-tab" id="it-tab-tickets"></button>
+      <button class="db-tab" id="it-tab-chat"></button>
+    </div>
+    <div id="it-assets"></div>
+    <div id="it-equipment" class="hidden"></div>
+    <div id="it-tickets" class="hidden"></div>
+    <div id="it-chat" class="hidden"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="it.js"></script>
+</body>
+</html>

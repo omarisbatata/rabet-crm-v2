@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get IT Help — رابط CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="dashboard-page">
+  <div class="finance-page-header">
+    <div class="finance-page-title" id="ith-title"></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="nav-btn-dim" id="btn-ith-lang" style="background:none;border:none;"></button>
+      <a class="btn-ghost" id="btn-ith-back" href="index.html" style="width:auto;padding:8px 14px;text-decoration:none;display:inline-block;"></a>
+    </div>
+  </div>
+
+  <div class="finance-page-status" id="ith-status"></div>
+
+  <div id="ith-body" class="hidden">
+    <div class="db-tabs">
+      <button class="db-tab active" id="ith-tab-tickets"></button>
+      <button class="db-tab" id="ith-tab-chat"></button>
+      <button class="db-tab" id="ith-tab-equipment"></button>
+    </div>
+    <div id="ith-tickets"></div>
+    <div id="ith-chat" class="hidden"></div>
+    <div id="ith-equipment" class="hidden"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="ithelp.js"></script>
+</body>
+</html>
