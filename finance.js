@@ -171,8 +171,48 @@ function payeeFieldHtml(entryType, currentValue) {
     </select>`
   }
   const presets = [...new Set(entries.filter(e => e.entry_type === 'expense').map(e => e.payee).filter(Boolean))].sort()
-  return `<input class="field-input" id="fin-payee" list="fin-payee-presets" value="${esc(currentValue || '')}" />
-    <datalist id="fin-payee-presets">${presets.map(p => `<option value="${esc(p)}"></option>`).join('')}</datalist>`
+  return `<div class="combo-wrap">
+    <input class="field-input" id="fin-payee" autocomplete="off" value="${esc(currentValue || '')}" />
+    <div class="combo-list hidden" id="fin-payee-combo-list">
+      ${presets.map(p => `<div class="combo-item" data-value="${esc(p)}">${esc(p)}</div>`).join('')}
+    </div>
+  </div>`
+}
+
+// Click/focus the expense payee field to see the full preset list (not
+// filtered until you start typing) — a plain <datalist> doesn't reliably do
+// this across browsers, so it's a small hand-rolled combo box instead.
+function wirePayeeCombo() {
+  const input = qs('#fin-payee')
+  const list  = qs('#fin-payee-combo-list')
+  if (!input || !list) return
+
+  const showList = () => list.classList.remove('hidden')
+  const hideList = () => list.classList.add('hidden')
+
+  input.addEventListener('focus', showList)
+  input.addEventListener('click', showList)
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase()
+    qsa('#fin-payee-combo-list .combo-item').forEach(item => {
+      item.classList.toggle('hidden', !!q && !item.dataset.value.toLowerCase().includes(q))
+    })
+    showList()
+  })
+  input.addEventListener('blur', () => setTimeout(hideList, 150))
+
+  qsa('#fin-payee-combo-list .combo-item').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault() // keep the input focused so 'blur' doesn't fire before this click registers
+      input.value = item.dataset.value
+      hideList()
+    })
+  })
+}
+
+function setPayeeField(entryType, currentValue) {
+  qs('#fin-payee-wrap').innerHTML = payeeFieldHtml(entryType, currentValue)
+  wirePayeeCombo()
 }
 
 function renderFinance(editingId) {
@@ -254,7 +294,7 @@ function renderFinance(editingId) {
         <option value="income"${formType === 'income' ? ' selected' : ''}>${t('finance_type_income')}</option>
       </select>
       <label class="field-label">${t('f_payee')}</label>
-      <div id="fin-payee-wrap">${payeeFieldHtml(formType, editing?.payee)}</div>
+      <div id="fin-payee-wrap"></div>
       <label class="field-label">${t('f_category')}</label>
       <input class="field-input" id="fin-category" value="${esc(editing?.category || '')}" />
       <label class="field-label">${t('f_amount')}</label>
@@ -282,9 +322,8 @@ function renderFinance(editingId) {
   const form = qs('#finance-form')
   if (editing !== null) form.classList.remove('hidden')
 
-  qs('#fin-type').addEventListener('change', e => {
-    qs('#fin-payee-wrap').innerHTML = payeeFieldHtml(e.target.value, null)
-  })
+  setPayeeField(formType, editing?.payee)
+  qs('#fin-type').addEventListener('change', e => setPayeeField(e.target.value, null))
 
   qs('#btn-finance-new').addEventListener('click', () => renderFinance(null))
   qs('#btn-finance-cancel')?.addEventListener('click', () => renderFinance())

@@ -575,6 +575,16 @@ tbody td.col-status { white-space: nowrap; }
   background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer;
 }
 .finance-row-actions button:hover { color: var(--text); }
+.combo-wrap { position: relative; }
+.combo-list {
+  position: absolute; top: calc(100% - 6px); left: 0; right: 0; z-index: 20;
+  max-height: 180px; overflow-y: auto;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 20px rgba(0,0,0,.35);
+}
+.combo-item { padding: 8px 12px; font-size: 13px; cursor: pointer; }
+.combo-item:hover { background: var(--surf2); }
 .template-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .template-row {
   display: flex; align-items: center; gap: 10px;
