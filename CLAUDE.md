@@ -7,7 +7,8 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **App:** https://omarisbatata.github.io/rabet-crm-v2/ (GitHub Pages, repo `omarisbatata/rabet-crm-v2`)
 - **Supabase project:** `jpzplchcwtpihxfqdrlo` ("rabet-crm-v2", Frankfurt/eu-central-1)
 - **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
-  `0002_viewer_role.sql`). Access-test matrix passing 46/46 (`supabase/tests/access-matrix.mjs`).
+  `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`). Access-test matrix
+  passing 66/66 (`supabase/tests/access-matrix.mjs`).
 - **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
   deployed — both verified working end-to-end (12 real emails synced on first run).
 - **Team roster (live accounts):**
@@ -17,6 +18,7 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   - Obada Samman — teammate — `obada.samman@hotmail.com`
   - Shared **viewer** (checkup-only, no add/edit/delete, enforced by RLS not just UI) — used by
     Taim Kiwan and Taim Al Saadi together — `admin@rabet-crm.local`
+  - Zein — **accountant** (full CRUD on `finance_entries` only) — `Zeinn0there@rabetagency.com`
   - All teammate/owner passwords were set directly via the admin API (no invite emails needed
     after the first one); credentials were emailed to each person via the CRM's own send-email
     function.
@@ -62,15 +64,26 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
   via `supabase-js`'s built-in auth, which issues a JWT. Every RLS policy below reads
   `auth.uid()` / `auth.role()` from that JWT — no custom verification function needed.
 - A `public.profiles` table (1:1 with `auth.users`) carries app-specific fields: display name and
-  `role` (`'owner' | 'teammate' | 'viewer'`). A trigger creates the profile row automatically when
-  a new `auth.users` row is inserted (i.e., when Omar invites someone).
+  `role` (`'owner' | 'teammate' | 'viewer' | 'accountant'`). A trigger creates the profile row
+  automatically when a new `auth.users` row is inserted (i.e., when Omar invites someone).
 - `viewer` is a read-only role added for shared/checkup-only accounts: select is allowed
   everywhere authenticated is, but insert/update on `companies`, `emails`, and `templates`
   additionally require the caller's profile role to be `owner` or `teammate` (see migration
   `0002_viewer_role.sql`). Delete was already owner-only and needed no change. The app also hides
   Add/Edit/Delete/Compose UI for viewers, but RLS is the actual enforcement, not the UI.
+- `accountant` is a role scoped entirely to `finance_entries` (company spending/salary tracking,
+  see migrations `0003a_add_accountant_value.sql` and `0003_finance.sql`): full CRUD there, same as
+  `owner`, but zero access to `companies`/`emails`/`templates`/`profiles` beyond the baseline
+  `profiles_select_authenticated` policy every authenticated role gets. `teammate` and `viewer` get
+  no access to `finance_entries` at all (no policy for either role — deny by default). The app
+  hides the Finance nav link for anyone but owner/accountant, and `showFinance()` re-checks the
+  role before rendering as defense in depth (this app has no client-side routing to "hit a URL
+  directly" — it's a single page with modal overlays, so there's no separate URL to redirect from).
 - **Role changes are manual SQL only** — never exposed through the app or any RLS `update` policy.
-  With 3 people total, this isn't worth automating and it closes off any self-escalation path.
+  This includes granting the `accountant` role to a new profile: invite via the Supabase dashboard
+  as usual, then `update profiles set role = 'accountant' where id = '...'` in the SQL editor, same
+  manual process already used for owner/teammate/viewer. With this few people, automating role
+  assignment isn't worth it and it closes off any self-escalation path.
 - `anon` (logged-out) gets zero access anywhere. RLS is enabled with no anon-targeting policy on
   every table, and table-level grants to `anon` are explicitly revoked as defense in depth.
 
@@ -80,7 +93,9 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
 
 The block below is the original launch schema (`0001_init.sql`). It has since been extended by
 `supabase/migrations/0002a_add_viewer_value.sql` and `0002_viewer_role.sql` (adds the `viewer`
-role and tightens `companies`/`emails`/`templates` insert+update policies — see Auth model above).
+role and tightens `companies`/`emails`/`templates` insert+update policies — see Auth model above),
+and by `0003a_add_accountant_value.sql` and `0003_finance.sql` (adds the `accountant` role and the
+`finance_entries` table — full CRUD for owner/accountant, no access for teammate/viewer).
 The `supabase/migrations/` directory is the authoritative current state; this block is kept for
 the original per-table rationale, not as a byte-for-byte mirror of the live schema.
 
@@ -313,21 +328,25 @@ revoke all on public.templates from anon;
 
 ## Access test matrix (run before any UI is built)
 
-Every cell below must be verified against the live project — as `owner`, `teammate`, `viewer`, and
-`anon` — using separate Supabase clients (owner/teammate/viewer JWT, bare anon key). Expected
+Every cell below must be verified against the live project — as `owner`, `teammate`, `viewer`,
+`accountant`, and `anon` — using separate Supabase clients (JWT per role, bare anon key). Expected
 results:
 
-| Table      | anon (select/insert/update/delete) | teammate (select/insert/update/delete) | viewer (select/insert/update/delete) | owner (select/insert/update/delete) |
-|------------|-------------------------------------|------------------------------------------|----------------------------------------|----------------------------------------|
-| profiles   | deny / deny / deny / deny           | allow / deny¹ / own-row-only² / deny     | allow / deny¹ / own-row-only² / deny   | allow / deny¹ / own-row-only² / deny   |
-| companies  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          |
-| emails     | deny / deny / deny / deny           | allow / allow (outbound only) / allow / **deny** | allow / **deny** / **deny** / deny | allow / allow / allow / allow  |
-| templates  | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          |
+| Table           | anon (select/insert/update/delete) | teammate (select/insert/update/delete) | viewer (select/insert/update/delete) | owner (select/insert/update/delete) | accountant (select/insert/update/delete) |
+|-----------------|-------------------------------------|------------------------------------------|----------------------------------------|----------------------------------------|--------------------------------------------|
+| profiles        | deny / deny / deny / deny           | allow / deny¹ / own-row-only² / deny     | allow / deny¹ / own-row-only² / deny   | allow / deny¹ / own-row-only² / deny   | allow / deny¹ / own-row-only² / deny       |
+| companies       | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          | allow / **deny** / **deny** / deny         |
+| emails          | deny / deny / deny / deny           | allow / allow (outbound only) / allow / **deny** | allow / **deny** / **deny** / deny | allow / allow / allow / allow  | allow / **deny** / **deny** / deny |
+| templates       | deny / deny / deny / deny           | allow / allow / allow / **deny**         | allow / **deny** / **deny** / deny     | allow / allow / allow / allow          | allow / **deny** / **deny** / deny         |
+| finance_entries | deny / deny / deny / deny           | **deny** / **deny** / **deny** / **deny** | **deny** / **deny** / **deny** / **deny** | allow / allow / allow / allow       | allow / allow / allow / allow              |
 
 ¹ insert has no client-facing policy at all (trigger-only path) — all roles should get denied.
-² a teammate/owner/viewer can update their own `full_name` but an attempt to change their own
-`role` column must be rejected by the `with check` clause — test this explicitly, not just "update
-succeeds/fails" as a whole.
+² a teammate/owner/viewer/accountant can update their own `full_name` but an attempt to change
+their own `role` column must be rejected by the `with check` clause — test this explicitly, not
+just "update succeeds/fails" as a whole.
+
+`finance_entries` denies teammate/viewer entirely by design (no policy for either role) — this is
+the one table where `companies`/`emails`/`templates`-style baseline select access does not apply.
 
 Implemented and passing (46/46) in `supabase/tests/access-matrix.mjs` — mints real sessions via
 admin `generate_link` (magiclink) + verify, no passwords touched, so it never interferes with a

@@ -1,10 +1,13 @@
 // Access-test matrix from CLAUDE.md — verifies RLS behaves as designed for
-// anon / teammate / owner against the live project, before any UI is trusted.
+// anon / teammate / owner / viewer / accountant against the live project,
+// before any UI is trusted.
 //
-// Mints real sessions for the owner and a teammate via the admin
-// generate_link + magiclink-verify flow (no password ever touched, so this
-// never interferes with their pending invite/recovery links), then drives
-// PostgREST directly with each role's token.
+// Mints real sessions for the owner, a teammate, and the viewer via the
+// admin generate_link + magiclink-verify flow (no password ever touched, so
+// this never interferes with their pending invite/recovery links). The
+// accountant has no real account yet, so a dedicated fixture user is
+// created for the run and deleted again at the end. Drives PostgREST
+// directly with each role's token.
 //
 // Usage: node supabase/tests/access-matrix.mjs
 // Reads SUPABASE_PROJECT_REF / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
@@ -27,9 +30,15 @@ const ANON    = env.SUPABASE_ANON_KEY
 const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY
 const BASE    = `https://${REF}.supabase.co`
 
-const OWNER_EMAIL    = 'oshalak@hotmail.com'
-const TEAMMATE_EMAIL = 'luqman.elmaddah@gmail.com'
-const VIEWER_EMAIL   = 'admin@rabet-crm.local'
+const OWNER_EMAIL      = 'oshalak@hotmail.com'
+const TEAMMATE_EMAIL   = 'luqman.elmaddah@gmail.com'
+const VIEWER_EMAIL     = 'admin@rabet-crm.local'
+// Dedicated fixture account for the accountant role — no real person behind
+// it (unlike the shared viewer account above). Created fresh and deleted
+// again at the end of the run so it leaves no permanent residue.
+const ACCOUNTANT_EMAIL = 'access-test-accountant@rabet-crm.local'
+
+const today = () => new Date().toISOString().slice(0, 10)
 
 let pass = 0, fail = 0
 function check(label, expected, actual, detail = '') {
@@ -52,6 +61,25 @@ async function mintSession(email) {
   return { token: frag.get('access_token'), userId: genJson.id }
 }
 
+async function createFixtureAccountant() {
+  const res = await fetch(`${BASE}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ACCOUNTANT_EMAIL, email_confirm: true }),
+  })
+  const json = await res.json()
+  if (!res.ok) throw new Error(`create fixture accountant failed: ${JSON.stringify(json)}`)
+  return json.id
+}
+
+async function deleteFixtureAccountant(userId) {
+  if (!userId) return
+  await fetch(`${BASE}/auth/v1/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+  })
+}
+
 async function rest(tableAndQuery, { method = 'GET', token, body } = {}) {
   const headers = { apikey: ANON, 'Content-Type': 'application/json' }
   headers.Authorization = `Bearer ${token || ANON}`
@@ -71,9 +99,15 @@ async function main() {
   const owner    = await mintSession(OWNER_EMAIL)
   const teammate = await mintSession(TEAMMATE_EMAIL)
   const viewer   = await mintSession(VIEWER_EMAIL)
-  console.log(`owner=${owner.userId} teammate=${teammate.userId} viewer=${viewer.userId}\n`)
 
-  const roles = { anon: { token: null }, teammate, owner, viewer }
+  console.log('Creating accountant fixture account...')
+  const accountantUserId = await createFixtureAccountant()
+  await rest(`profiles?id=eq.${accountantUserId}`, { method: 'PATCH', token: SERVICE, body: { role: 'accountant' } })
+  const accountant = await mintSession(ACCOUNTANT_EMAIL)
+
+  console.log(`owner=${owner.userId} teammate=${teammate.userId} viewer=${viewer.userId} accountant=${accountant.userId}\n`)
+
+  const roles = { anon: { token: null }, teammate, owner, viewer, accountant }
 
   // ── profiles ────────────────────────────────────────────────────────────
   console.log('\n--- profiles ---')
@@ -238,6 +272,83 @@ async function main() {
     const res = await rest(`templates?id=eq.${templateId}`, { method: 'DELETE', token: owner.token })
     check('templates delete allowed (owner)', true, res.ok)
   }
+
+  // ── finance_entries ─────────────────────────────────────────────────────
+  console.log('\n--- finance_entries ---')
+
+  let ownerEntryId
+  {
+    const res = await rest('finance_entries', {
+      method: 'POST', token: owner.token,
+      body: { entry_type: 'expense', payee: 'Access Test Vendor', amount: 10, entry_date: today() },
+    })
+    check('finance_entries insert (owner)', true, res.ok)
+    ownerEntryId = res.json?.[0]?.id
+  }
+
+  for (const [name, r] of Object.entries(roles)) {
+    const allowed = name === 'owner' || name === 'accountant'
+    const res = await rest('finance_entries?select=id', { token: r.token })
+    if (name === 'anon') { check(`finance_entries select denied (${name})`, true, !res.ok); continue }
+    check(`finance_entries select (${name})`, allowed, res.ok && res.rowCount > 0)
+  }
+
+  {
+    const res = await rest('finance_entries', {
+      method: 'POST', token: accountant.token,
+      body: { entry_type: 'salary', payee: 'Access Test Employee', amount: 500, entry_date: today() },
+    })
+    check('finance_entries insert (accountant)', true, res.ok)
+  }
+  {
+    const res = await rest('finance_entries', {
+      method: 'POST', token: teammate.token,
+      body: { entry_type: 'expense', payee: 'Access Test (teammate)', amount: 1, entry_date: today() },
+    })
+    check('finance_entries insert denied (teammate)', true, !res.ok || res.rowCount === 0)
+  }
+  {
+    const res = await rest('finance_entries', {
+      method: 'POST', token: viewer.token,
+      body: { entry_type: 'expense', payee: 'Access Test (viewer)', amount: 1, entry_date: today() },
+    })
+    check('finance_entries insert denied (viewer)', true, !res.ok || res.rowCount === 0)
+  }
+  {
+    const res = await rest('finance_entries', {
+      method: 'POST', token: null,
+      body: { entry_type: 'expense', payee: 'Access Test (anon)', amount: 1, entry_date: today() },
+    })
+    check('finance_entries insert denied (anon)', true, !res.ok)
+  }
+
+  if (ownerEntryId) {
+    const res = await rest(`finance_entries?id=eq.${ownerEntryId}`, { method: 'PATCH', token: accountant.token, body: { amount: 20 } })
+    check('finance_entries update (accountant)', true, res.ok && res.rowCount > 0)
+  }
+  if (ownerEntryId) {
+    const res = await rest(`finance_entries?id=eq.${ownerEntryId}`, { method: 'PATCH', token: teammate.token, body: { amount: 30 } })
+    check('finance_entries update denied (teammate)', true, res.rowCount === 0)
+  }
+  if (ownerEntryId) {
+    const res = await rest(`finance_entries?id=eq.${ownerEntryId}`, { method: 'PATCH', token: viewer.token, body: { amount: 30 } })
+    check('finance_entries update denied (viewer)', true, res.rowCount === 0)
+  }
+  if (ownerEntryId) {
+    const res = await rest(`finance_entries?id=eq.${ownerEntryId}`, { method: 'DELETE', token: teammate.token })
+    const stillThere = await rest(`finance_entries?id=eq.${ownerEntryId}&select=id`, { token: SERVICE })
+    check('finance_entries delete denied (teammate)', true, stillThere.rowCount === 1)
+  }
+  if (ownerEntryId) {
+    const res = await rest(`finance_entries?id=eq.${ownerEntryId}`, { method: 'DELETE', token: owner.token })
+    check('finance_entries delete allowed (owner)', true, res.ok)
+  }
+
+  // cleanup any rows left by the checks above (accountant's salary insert, etc.)
+  await rest(`finance_entries?payee=like.Access*Test*`, { method: 'DELETE', token: SERVICE })
+
+  console.log('\nDeleting accountant fixture account...')
+  await deleteFixtureAccountant(accountantUserId)
 
   console.log(`\n${pass} passed, ${fail} failed`)
   process.exit(fail > 0 ? 1 : 0)
