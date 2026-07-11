@@ -75,10 +75,15 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
   see migrations `0003a_add_accountant_value.sql` and `0003_finance.sql`): full CRUD there, same as
   `owner`, but zero access to `companies`/`emails`/`templates`/`profiles` beyond the baseline
   `profiles_select_authenticated` policy every authenticated role gets. `teammate` and `viewer` get
-  no access to `finance_entries` at all (no policy for either role — deny by default). The app
-  hides the Finance nav link for anyone but owner/accountant, and `showFinance()` re-checks the
-  role before rendering as defense in depth (this app has no client-side routing to "hit a URL
-  directly" — it's a single page with modal overlays, so there's no separate URL to redirect from).
+  no access to `finance_entries` at all (no policy for either role — deny by default).
+- Finance is the one part of the app that isn't a modal overlay in `index.html`/`app.js` — it's a
+  standalone page (`finance.html` + `finance.js`) that opens in a new tab from the sidebar nav
+  (`window.open('finance.html', '_blank')`), sharing the same Supabase session via localStorage.
+  The nav link itself is hidden for anyone but owner/accountant, and `finance.js`'s `init()`
+  independently re-checks the session + role on load and redirects to `index.html` if either check
+  fails — since this page has a real, guessable URL (unlike the rest of the app), that redirect is
+  the actual enforcement layer for "don't let a teammate/viewer in by typing the URL," not just RLS
+  and not just hiding the nav link.
 - **Role changes are manual SQL only** — never exposed through the app or any RLS `update` policy.
   This includes granting the `accountant` role to a new profile: invite via the Supabase dashboard
   as usual, then `update profiles set role = 'accountant' where id = '...'` in the SQL editor, same

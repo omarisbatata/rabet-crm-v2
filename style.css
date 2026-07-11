@@ -532,7 +532,25 @@ tbody td.col-status { white-space: nowrap; }
 
 /* ── Templates ──────────────────────────────────────────────────────────── */
 .templates-card { width: 640px; max-width: 95vw; }
-.finance-card { width: 960px; max-width: 95vw; }
+
+/* ── Finance page (standalone tab, not a modal) ──────────────────────────── */
+#finance-page {
+  height: 100%; overflow-y: auto;
+  max-width: 1100px; margin: 0 auto;
+  padding: 28px 32px 40px;
+  display: flex; flex-direction: column;
+}
+.finance-page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.finance-page-title {
+  font-size: 20px; font-weight: 700;
+}
+.finance-page-status {
+  display: flex; align-items: center; justify-content: center;
+  flex: 1; color: var(--muted); font-size: 14px; text-align: center;
+}
 .finance-totals {
   display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
 }
@@ -550,7 +568,7 @@ tbody td.col-status { white-space: nowrap; }
   display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap;
 }
 .finance-filters .field-input, .finance-filters .filter-select { margin-bottom: 0; width: auto; }
-.finance-table-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 16px; }
+.finance-table-wrap { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 16px; }
 .finance-table { width: 100%; border-collapse: collapse; }
 .finance-row-actions { display: flex; gap: 6px; }
 .finance-row-actions button {

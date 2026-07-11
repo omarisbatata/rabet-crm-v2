@@ -127,28 +127,6 @@ en: {
   template_use: 'Use…',
   template_delete_confirm: 'Delete this template?',
   finance_nav: '$ Finance',
-  finance_title: 'Finance',
-  finance_type_expense: 'Expense',
-  finance_type_salary: 'Salary',
-  finance_filter_all_types: 'All Types',
-  finance_from: 'From',
-  finance_to: 'To',
-  finance_add: '+ Add Entry',
-  finance_add_title: 'Add Entry',
-  finance_edit_title: 'Edit Entry',
-  finance_total_expenses: 'Total Expenses',
-  finance_total_salaries: 'Total Salaries',
-  finance_total_net: 'Net',
-  finance_empty: 'No entries match your filters.',
-  finance_delete_confirm: 'Delete this entry? This cannot be undone.',
-  f_entry_type: 'Type',
-  f_payee: 'Payee',
-  f_category: 'Category',
-  f_amount: 'Amount',
-  f_currency: 'Currency',
-  f_entry_date: 'Date',
-  col_date: 'Date', col_type: 'Type', col_payee: 'Payee',
-  col_category: 'Category', col_amount: 'Amount', col_actions: '',
 },
 ar: {
   login_title: 'تسجيل الدخول',
@@ -234,28 +212,6 @@ ar: {
   template_use: 'استخدام…',
   template_delete_confirm: 'حذف هذا القالب؟',
   finance_nav: '$ المالية',
-  finance_title: 'المالية',
-  finance_type_expense: 'مصروف',
-  finance_type_salary: 'راتب',
-  finance_filter_all_types: 'كل الأنواع',
-  finance_from: 'من',
-  finance_to: 'إلى',
-  finance_add: '+ إضافة قيد',
-  finance_add_title: 'إضافة قيد',
-  finance_edit_title: 'تعديل قيد',
-  finance_total_expenses: 'إجمالي المصاريف',
-  finance_total_salaries: 'إجمالي الرواتب',
-  finance_total_net: 'الصافي',
-  finance_empty: 'لا توجد قيود تطابق الفلتر.',
-  finance_delete_confirm: 'حذف هذا القيد؟ لا يمكن التراجع.',
-  f_entry_type: 'النوع',
-  f_payee: 'المستفيد',
-  f_category: 'الفئة',
-  f_amount: 'المبلغ',
-  f_currency: 'العملة',
-  f_entry_date: 'التاريخ',
-  col_date: 'التاريخ', col_type: 'النوع', col_payee: 'المستفيد',
-  col_category: 'الفئة', col_amount: 'المبلغ', col_actions: '',
 },
 }
 
@@ -268,8 +224,6 @@ let state = {
   companies: [],
   emails:    [],       // unlinked emails
   templates: [],
-  financeEntries: [],
-  financeFilters: { type: '', from: '', to: '' },
   selectedEmailId: null,
   lang:      localStorage.getItem('crm_lang') || 'en',
   selected:  null,    // selected company id
@@ -720,173 +674,6 @@ qs('#btn-templates').addEventListener('click', showTemplates)
 qs('#templates-close').addEventListener('click', () => qs('#templates-overlay').classList.add('hidden'))
 qs('#templates-overlay').addEventListener('click', e => { if (e.target === qs('#templates-overlay')) qs('#templates-overlay').classList.add('hidden') })
 
-// ── Finance ───────────────────────────────────────────────────────────────────
-async function loadFinanceEntries() {
-  const { data, error } = await sb.from('finance_entries').select('*').order('entry_date', { ascending: false })
-  if (error) { sbar('Error: ' + error.message); return }
-  state.financeEntries = data || []
-}
-
-function filteredFinanceEntries() {
-  const { type, from, to } = state.financeFilters
-  return state.financeEntries.filter(e => {
-    if (type && e.entry_type !== type) return false
-    if (from && e.entry_date < from) return false
-    if (to   && e.entry_date > to)   return false
-    return true
-  })
-}
-
-async function showFinance() {
-  if (!canSeeFinance()) { sbar(t('owner_only')); return }
-  qs('#finance-overlay').classList.remove('hidden')
-  await loadFinanceEntries()
-  renderFinance()
-}
-
-function hideFinance() {
-  qs('#finance-overlay').classList.add('hidden')
-}
-
-function renderFinance(editingId) {
-  if (!canSeeFinance()) { hideFinance(); return }
-
-  const body = qs('#finance-body')
-  const editing = editingId !== undefined
-    ? state.financeEntries.find(x => x.id === editingId) || {}
-    : null
-  const data = filteredFinanceEntries()
-
-  const totalExpenses = data.filter(e => e.entry_type === 'expense').reduce((s, e) => s + Number(e.amount), 0)
-  const totalSalaries  = data.filter(e => e.entry_type === 'salary').reduce((s, e) => s + Number(e.amount), 0)
-  const net = totalExpenses + totalSalaries
-
-  const rowsHtml = data.length
-    ? data.map(e => `
-      <tr data-id="${e.id}">
-        <td>${esc(e.entry_date)}</td>
-        <td>${t(e.entry_type === 'salary' ? 'finance_type_salary' : 'finance_type_expense')}</td>
-        <td title="${esc(e.payee)}">${esc(e.payee)}</td>
-        <td>${esc(e.category || '')}</td>
-        <td>${Number(e.amount).toFixed(2)} ${esc(e.currency)}</td>
-        <td class="finance-row-actions">
-          <button data-act="edit">${t('edit')}</button>
-          <button data-act="delete">${t('delete')}</button>
-        </td>
-      </tr>
-    `).join('')
-    : `<tr><td colspan="6" class="field-hint">${t('finance_empty')}</td></tr>`
-
-  body.innerHTML = `
-    <div class="finance-totals">
-      <div class="finance-total-tile">
-        <div class="finance-total-label">${t('finance_total_expenses')}</div>
-        <div class="finance-total-value" style="color:#F43F5E">${totalExpenses.toFixed(2)}</div>
-      </div>
-      <div class="finance-total-tile">
-        <div class="finance-total-label">${t('finance_total_salaries')}</div>
-        <div class="finance-total-value" style="color:#F59E0B">${totalSalaries.toFixed(2)}</div>
-      </div>
-      <div class="finance-total-tile">
-        <div class="finance-total-label">${t('finance_total_net')}</div>
-        <div class="finance-total-value" style="color:#34D399">${net.toFixed(2)}</div>
-      </div>
-    </div>
-    <div class="finance-filters">
-      <select class="filter-select" id="fin-filter-type">
-        <option value="">${t('finance_filter_all_types')}</option>
-        <option value="expense">${t('finance_type_expense')}</option>
-        <option value="salary">${t('finance_type_salary')}</option>
-      </select>
-      <span class="field-hint" style="margin:0;">${t('finance_from')}</span>
-      <input type="date" class="field-input" id="fin-filter-from" />
-      <span class="field-hint" style="margin:0;">${t('finance_to')}</span>
-      <input type="date" class="field-input" id="fin-filter-to" />
-      <button class="btn-ghost" id="btn-finance-new" style="width:auto;padding:8px 14px;margin-left:auto;">${t('finance_add')}</button>
-    </div>
-    <div class="finance-table-wrap">
-      <table class="finance-table">
-        <thead><tr>
-          <th>${t('col_date')}</th><th>${t('col_type')}</th><th>${t('col_payee')}</th>
-          <th>${t('col_category')}</th><th>${t('col_amount')}</th><th>${t('col_actions')}</th>
-        </tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>
-    <div id="finance-form" class="field-group hidden">
-      <label class="field-label">${t('f_entry_type')}</label>
-      <select class="field-select" id="fin-type">
-        <option value="expense"${editing?.entry_type !== 'salary' ? ' selected' : ''}>${t('finance_type_expense')}</option>
-        <option value="salary"${editing?.entry_type === 'salary' ? ' selected' : ''}>${t('finance_type_salary')}</option>
-      </select>
-      <label class="field-label">${t('f_payee')}</label>
-      <input class="field-input" id="fin-payee" value="${esc(editing?.payee || '')}" />
-      <label class="field-label">${t('f_category')}</label>
-      <input class="field-input" id="fin-category" value="${esc(editing?.category || '')}" />
-      <label class="field-label">${t('f_amount')}</label>
-      <input class="field-input" id="fin-amount" type="number" step="0.01" value="${esc(editing?.amount ?? '')}" />
-      <label class="field-label">${t('f_currency')}</label>
-      <input class="field-input" id="fin-currency" value="${esc(editing?.currency || 'USD')}" />
-      <label class="field-label">${t('f_entry_date')}</label>
-      <input class="field-input" id="fin-date" type="date" value="${esc(editing?.entry_date ? editing.entry_date.slice(0,10) : today())}" />
-      <label class="field-label">${t('f_notes')}</label>
-      <textarea class="field-textarea" id="fin-notes">${esc(editing?.notes || '')}</textarea>
-      <div class="modal-footer">
-        <button class="btn-primary" id="btn-finance-save">${t('save')}</button>
-        <button class="btn-ghost" id="btn-finance-cancel">${t('cancel')}</button>
-      </div>
-    </div>
-  `
-
-  qs('#fin-filter-type').value = state.financeFilters.type
-  qs('#fin-filter-from').value = state.financeFilters.from
-  qs('#fin-filter-to').value   = state.financeFilters.to
-  qs('#fin-filter-type').onchange = e => { state.financeFilters.type = e.target.value; renderFinance() }
-  qs('#fin-filter-from').onchange = e => { state.financeFilters.from = e.target.value; renderFinance() }
-  qs('#fin-filter-to').onchange   = e => { state.financeFilters.to   = e.target.value; renderFinance() }
-
-  const form = qs('#finance-form')
-  if (editing !== null) form.classList.remove('hidden')
-
-  qs('#btn-finance-new').addEventListener('click', () => renderFinance(null))
-  qs('#btn-finance-cancel')?.addEventListener('click', () => renderFinance())
-
-  qs('#btn-finance-save')?.addEventListener('click', async () => {
-    const payload = {
-      entry_type: qs('#fin-type').value,
-      payee:      qs('#fin-payee').value.trim(),
-      category:   qs('#fin-category').value.trim() || null,
-      amount:     parseFloat(qs('#fin-amount').value),
-      currency:   qs('#fin-currency').value.trim() || 'USD',
-      entry_date: qs('#fin-date').value,
-      notes:      qs('#fin-notes').value.trim() || null,
-    }
-    if (!payload.payee || !payload.entry_date || Number.isNaN(payload.amount)) return
-    const id = editing?.id
-    const { error } = id
-      ? await sb.from('finance_entries').update(payload).eq('id', id)
-      : await sb.from('finance_entries').insert(payload)
-    if (error) { sbar('Error: ' + error.message); return }
-    await loadFinanceEntries()
-    renderFinance()
-  })
-
-  qsa('.finance-table tbody tr[data-id]').forEach(row => {
-    const id = row.dataset.id
-    row.querySelector('[data-act="edit"]').addEventListener('click', () => renderFinance(id))
-    row.querySelector('[data-act="delete"]').addEventListener('click', async () => {
-      if (!confirm(t('finance_delete_confirm'))) return
-      const { error } = await sb.from('finance_entries').delete().eq('id', id)
-      if (error) { sbar('Error: ' + error.message); return }
-      await loadFinanceEntries()
-      renderFinance()
-    })
-  })
-}
-
-qs('#finance-close').addEventListener('click', hideFinance)
-qs('#finance-overlay').addEventListener('click', e => { if (e.target === qs('#finance-overlay')) hideFinance() })
-
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
   renderTable()
@@ -1033,7 +820,7 @@ function buildSidebar() {
   qs('#btn-inbox').classList.toggle('hidden', !isOwner())
   qs('#btn-inbox').onclick    = showInbox
   qs('#btn-finance').classList.toggle('hidden', !canSeeFinance())
-  qs('#btn-finance').onclick  = showFinance
+  qs('#btn-finance').onclick  = () => window.open('finance.html', '_blank')
   qs('#btn-export').onclick   = exportCSV
   qs('#btn-settings').onclick = showSettings
   qs('#btn-lang').textContent = t('lang_switch')
