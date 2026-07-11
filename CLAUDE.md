@@ -7,8 +7,9 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **App:** https://omarisbatata.github.io/rabet-crm-v2/ (GitHub Pages, repo `omarisbatata/rabet-crm-v2`)
 - **Supabase project:** `jpzplchcwtpihxfqdrlo` ("rabet-crm-v2", Frankfurt/eu-central-1)
 - **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
-  `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`). Access-test matrix
-  passing 66/66 (`supabase/tests/access-matrix.mjs`).
+  `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`,
+  `0004_add_income_type.sql`). Access-test matrix passing 66/66 (`supabase/tests/access-matrix.mjs`,
+  unaffected by 0004 since it only widens the `entry_type` check constraint, no RLS change).
 - **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
   deployed — both verified working end-to-end (12 real emails synced on first run).
 - **Team roster (live accounts):**
@@ -84,6 +85,21 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
   fails — since this page has a real, guessable URL (unlike the rest of the app), that redirect is
   the actual enforcement layer for "don't let a teammate/viewer in by typing the URL," not just RLS
   and not just hiding the nav link.
+- `finance_entries.entry_type` is `'expense' | 'salary' | 'income'` (migration
+  `0004_add_income_type.sql` widened the check constraint to add `income`). The **payee** field
+  changes input mode per type, all in `finance.js`'s `payeeFieldHtml()` — this is deliberate, not
+  three unrelated hacks:
+  - `salary` → fixed dropdown of team member names, pulled live from `profiles` (excludes the
+    shared `viewer` account). No free typing.
+  - `income` → fixed dropdown: Monthly Sub / Deals / Photoshoots (`INCOME_OPTIONS` in `finance.js`).
+    No free typing.
+  - `expense` → free-text input backed by an HTML `<datalist>` of distinct payee values already
+    used on other expense rows, so it behaves like a combo box: pick an existing one or type a new
+    one, and the new one becomes a preset on its own next time (no separate presets table — it's
+    just derived from `finance_entries` history).
+  If you edit an older row whose stored payee no longer matches the current preset list (e.g. an
+  ex-employee), that value is still injected as an extra option so editing never silently
+  overwrites it.
 - **Role changes are manual SQL only** — never exposed through the app or any RLS `update` policy.
   This includes granting the `accountant` role to a new profile: invite via the Supabase dashboard
   as usual, then `update profiles set role = 'accountant' where id = '...'` in the SQL editor, same

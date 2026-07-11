@@ -6,6 +6,12 @@
 // unlike the rest of the CRM, so this redirect is the actual enforcement
 // layer on top of RLS, not just a UI nicety.
 
+const INCOME_OPTIONS = [
+  { value: 'Monthly Sub',  labelKey: 'finance_income_monthly_sub' },
+  { value: 'Deals',        labelKey: 'finance_income_deals' },
+  { value: 'Photoshoots',  labelKey: 'finance_income_photoshoots' },
+]
+
 const T = {
 en: {
   finance_title: '$ Finance',
@@ -14,10 +20,15 @@ en: {
   loading: 'Loading…',
   finance_type_expense: 'Expense',
   finance_type_salary: 'Salary',
+  finance_type_income: 'Income',
+  finance_income_monthly_sub: 'Monthly Sub',
+  finance_income_deals: 'Deals',
+  finance_income_photoshoots: 'Photoshoots',
   finance_filter_all_types: 'All Types',
   finance_from: 'From',
   finance_to: 'To',
   finance_add: '+ Add Entry',
+  finance_total_income: 'Total Income',
   finance_total_expenses: 'Total Expenses',
   finance_total_salaries: 'Total Salaries',
   finance_total_net: 'Net',
@@ -36,10 +47,15 @@ ar: {
   loading: 'جارٍ التحميل…',
   finance_type_expense: 'مصروف',
   finance_type_salary: 'راتب',
+  finance_type_income: 'دخل',
+  finance_income_monthly_sub: 'اشتراك شهري',
+  finance_income_deals: 'صفقات',
+  finance_income_photoshoots: 'جلسات تصوير',
   finance_filter_all_types: 'كل الأنواع',
   finance_from: 'من',
   finance_to: 'إلى',
   finance_add: '+ إضافة قيد',
+  finance_total_income: 'إجمالي الدخل',
   finance_total_expenses: 'إجمالي المصاريف',
   finance_total_salaries: 'إجمالي الرواتب',
   finance_total_net: 'الصافي',
@@ -56,6 +72,7 @@ ar: {
 let sb
 let lang = localStorage.getItem('crm_lang') || 'en'
 let entries = []
+let employees = []   // full_name list from profiles, for the salary payee preset
 let filters = { type: '', from: '', to: '' }
 
 const t   = key => T[lang][key] || key
@@ -66,6 +83,12 @@ const today = () => new Date().toISOString().slice(0, 10)
 function esc(str) {
   if (!str && str !== 0) return ''
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function typeLabel(entryType) {
+  if (entryType === 'income') return t('finance_type_income')
+  if (entryType === 'salary') return t('finance_type_salary')
+  return t('finance_type_expense')
 }
 
 function applyLang() {
@@ -100,7 +123,7 @@ async function init() {
 
   qs('#fp-status').classList.add('hidden')
   qs('#finance-body').classList.remove('hidden')
-  await loadEntries()
+  await Promise.all([loadEntries(), loadEmployees()])
   renderFinance()
 }
 
@@ -108,6 +131,12 @@ async function loadEntries() {
   const { data, error } = await sb.from('finance_entries').select('*').order('entry_date', { ascending: false })
   if (error) { qs('#fp-status').classList.remove('hidden'); qs('#fp-status').textContent = 'Error: ' + error.message; return }
   entries = data || []
+}
+
+async function loadEmployees() {
+  const { data, error } = await sb.from('profiles').select('full_name').neq('role', 'viewer').order('full_name')
+  if (error) return
+  employees = (data || []).map(p => p.full_name).filter(Boolean)
 }
 
 function filteredEntries() {
@@ -119,6 +148,33 @@ function filteredEntries() {
   })
 }
 
+// Payee behaves differently per entry_type:
+//  - salary:  fixed dropdown of team members (from profiles)
+//  - income:  fixed dropdown — Monthly Sub / Deals / Photoshoots
+//  - expense: free text with a datalist of previously-used expense payees,
+//             so typing a new one effectively "saves" it as a future preset
+//             (it just shows up next time since it's now in the data)
+function payeeFieldHtml(entryType, currentValue) {
+  if (entryType === 'salary') {
+    const options = employees.slice()
+    if (currentValue && !options.includes(currentValue)) options.unshift(currentValue)
+    return `<select class="field-select" id="fin-payee">
+      ${options.map(name => `<option value="${esc(name)}"${name === currentValue ? ' selected' : ''}>${esc(name)}</option>`).join('')}
+    </select>`
+  }
+  if (entryType === 'income') {
+    const options = INCOME_OPTIONS.slice()
+    const known = options.some(o => o.value === currentValue)
+    return `<select class="field-select" id="fin-payee">
+      ${!known && currentValue ? `<option value="${esc(currentValue)}" selected>${esc(currentValue)}</option>` : ''}
+      ${options.map(o => `<option value="${esc(o.value)}"${o.value === currentValue ? ' selected' : ''}>${esc(t(o.labelKey))}</option>`).join('')}
+    </select>`
+  }
+  const presets = [...new Set(entries.filter(e => e.entry_type === 'expense').map(e => e.payee).filter(Boolean))].sort()
+  return `<input class="field-input" id="fin-payee" list="fin-payee-presets" value="${esc(currentValue || '')}" />
+    <datalist id="fin-payee-presets">${presets.map(p => `<option value="${esc(p)}"></option>`).join('')}</datalist>`
+}
+
 function renderFinance(editingId) {
   const body = qs('#finance-body')
   const editing = editingId !== undefined
@@ -126,15 +182,16 @@ function renderFinance(editingId) {
     : null
   const data = filteredEntries()
 
-  const totalExpenses = data.filter(e => e.entry_type === 'expense').reduce((s, e) => s + Number(e.amount), 0)
+  const totalIncome    = data.filter(e => e.entry_type === 'income').reduce((s, e) => s + Number(e.amount), 0)
+  const totalExpenses  = data.filter(e => e.entry_type === 'expense').reduce((s, e) => s + Number(e.amount), 0)
   const totalSalaries  = data.filter(e => e.entry_type === 'salary').reduce((s, e) => s + Number(e.amount), 0)
-  const net = totalExpenses + totalSalaries
+  const net = totalIncome - totalExpenses - totalSalaries
 
   const rowsHtml = data.length
     ? data.map(e => `
       <tr data-id="${e.id}">
         <td>${esc(e.entry_date)}</td>
-        <td>${t(e.entry_type === 'salary' ? 'finance_type_salary' : 'finance_type_expense')}</td>
+        <td>${typeLabel(e.entry_type)}</td>
         <td title="${esc(e.payee)}">${esc(e.payee)}</td>
         <td>${esc(e.category || '')}</td>
         <td>${Number(e.amount).toFixed(2)} ${esc(e.currency)}</td>
@@ -146,8 +203,14 @@ function renderFinance(editingId) {
     `).join('')
     : `<tr><td colspan="6" class="field-hint">${t('finance_empty')}</td></tr>`
 
+  const formType = editing?.entry_type || 'expense'
+
   body.innerHTML = `
     <div class="finance-totals">
+      <div class="finance-total-tile">
+        <div class="finance-total-label">${t('finance_total_income')}</div>
+        <div class="finance-total-value" style="color:#34D399">${totalIncome.toFixed(2)}</div>
+      </div>
       <div class="finance-total-tile">
         <div class="finance-total-label">${t('finance_total_expenses')}</div>
         <div class="finance-total-value" style="color:#F43F5E">${totalExpenses.toFixed(2)}</div>
@@ -158,12 +221,13 @@ function renderFinance(editingId) {
       </div>
       <div class="finance-total-tile">
         <div class="finance-total-label">${t('finance_total_net')}</div>
-        <div class="finance-total-value" style="color:#34D399">${net.toFixed(2)}</div>
+        <div class="finance-total-value" style="color:${net >= 0 ? '#34D399' : '#F43F5E'}">${net.toFixed(2)}</div>
       </div>
     </div>
     <div class="finance-filters">
       <select class="filter-select" id="fin-filter-type">
         <option value="">${t('finance_filter_all_types')}</option>
+        <option value="income">${t('finance_type_income')}</option>
         <option value="expense">${t('finance_type_expense')}</option>
         <option value="salary">${t('finance_type_salary')}</option>
       </select>
@@ -185,11 +249,12 @@ function renderFinance(editingId) {
     <div id="finance-form" class="field-group hidden">
       <label class="field-label">${t('f_entry_type')}</label>
       <select class="field-select" id="fin-type">
-        <option value="expense"${editing?.entry_type !== 'salary' ? ' selected' : ''}>${t('finance_type_expense')}</option>
-        <option value="salary"${editing?.entry_type === 'salary' ? ' selected' : ''}>${t('finance_type_salary')}</option>
+        <option value="expense"${formType === 'expense' ? ' selected' : ''}>${t('finance_type_expense')}</option>
+        <option value="salary"${formType === 'salary' ? ' selected' : ''}>${t('finance_type_salary')}</option>
+        <option value="income"${formType === 'income' ? ' selected' : ''}>${t('finance_type_income')}</option>
       </select>
       <label class="field-label">${t('f_payee')}</label>
-      <input class="field-input" id="fin-payee" value="${esc(editing?.payee || '')}" />
+      <div id="fin-payee-wrap">${payeeFieldHtml(formType, editing?.payee)}</div>
       <label class="field-label">${t('f_category')}</label>
       <input class="field-input" id="fin-category" value="${esc(editing?.category || '')}" />
       <label class="field-label">${t('f_amount')}</label>
@@ -216,6 +281,10 @@ function renderFinance(editingId) {
 
   const form = qs('#finance-form')
   if (editing !== null) form.classList.remove('hidden')
+
+  qs('#fin-type').addEventListener('change', e => {
+    qs('#fin-payee-wrap').innerHTML = payeeFieldHtml(e.target.value, null)
+  })
 
   qs('#btn-finance-new').addEventListener('click', () => renderFinance(null))
   qs('#btn-finance-cancel')?.addEventListener('click', () => renderFinance())
