@@ -53,6 +53,22 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
     Equipment), open to any signed-in role, including `it`/`owner` themselves. Both poll every 12s
     while their live-updating tab (tickets/chat) is active — same "no realtime, just poll" choice
     already made for the main company list.
+- **Follow-up reminders** (`0008_next_action_note.sql`) — deliberately did **not** add a separate
+  `next_action_date` column: `companies.followup_at` already was exactly that (already drove the
+  sidebar's upcoming/overdue counts and the table's Follow-up column), so the only new column is
+  `next_action_note` (free text — what needs to happen, shown in the modal, the view overlay, as a
+  tooltip on the table's Follow-up cell, and in the digest email below).
+  - **Dashboard → Follow-ups tab** (`dashboard.js`): every company with `followup_at` on or before
+    today, excluding `closed_won`/`dead`, split into Overdue vs. Due Today.
+  - **Daily digest email** (`sync/daily-digest.mjs` + `.github/workflows/daily-digest.yml`, cron
+    `0 6 * * *` UTC = 09:00 Damascus): queries the same overdue/due-today set with the service_role
+    key and emails a summary straight over Gmail SMTP via `nodemailer`. Recipient is fixed to the
+    owner only (`DIGEST_TO: oshalak@hotmail.com` in the workflow env), not per-assignee — Omar's
+    explicit choice, since one person needs full pipeline visibility rather than everyone getting a
+    filtered slice. **Not** routed through the `send-email` Edge Function — that function requires
+    a real logged-in user's JWT (see its header comment), which a cron job doesn't have, so this
+    sends directly instead, reusing the same `GMAIL_APP_PASSWORD` secret. No email is sent at all
+    when nothing is overdue/due (checked and logged, not just an empty send).
 - **Gmail:** inbound sync live on a 15-min GitHub Actions cron, outbound send-email Edge Function
   deployed — both verified working end-to-end (12 real emails synced on first run).
 - **Team roster (live accounts):**

@@ -86,6 +86,7 @@ en: {
   f_contact_type: 'Contact Type', f_contact_val: 'Contact Value',
   f_service: 'Service', f_status: 'Status', f_owner: 'Assigned To',
   f_followup: 'Next Follow-up', f_followup_hint: 'YYYY-MM-DD  (leave blank if none)',
+  f_next_action_note: 'Next Action', f_next_action_hint: "What needs to happen — shown on the owner's overdue digest.",
   f_notes: 'Notes',
   phone: '📞  Phone', email: '✉  Email', social: '⚡  Social',
   ctx_status: 'Set Status', ctx_wa: 'Open WhatsApp',
@@ -174,6 +175,7 @@ ar: {
   f_contact_type: 'نوع التواصل', f_contact_val: 'بيانات التواصل',
   f_service: 'الخدمة', f_status: 'الحالة', f_owner: 'المسؤول',
   f_followup: 'موعد المتابعة التالي', f_followup_hint: 'YYYY-MM-DD',
+  f_next_action_note: 'الإجراء التالي', f_next_action_hint: 'ما الذي يجب فعله — يظهر في تذكير صاحب الحساب اليومي.',
   f_notes: 'ملاحظات',
   phone: '📞  هاتف', email: '✉  بريد', social: '⚡  سوشال',
   ctx_status: 'تغيير الحالة', ctx_wa: 'فتح واتساب',
@@ -800,7 +802,7 @@ function renderTable() {
       <td title="${esc(contact)}">${esc(contact)}</td>
       <td title="${esc(c.service)}">${esc(c.service)}</td>
       <td class="col-status"><span class="status-badge ${s.cls}">${s.label}</span></td>
-      <td>${fuDisp}</td>
+      <td title="${esc(c.next_action_note || '')}">${fuDisp}</td>
       <td><span class="by-init" style="color:${byClr};background:${byBg}" title="${esc(modProfile?.full_name || '')}">${byInit}</span></td>
       <td>${(c.updated_at||'').slice(0,16).replace('T',' ')}</td>
       <td title="${esc(c.notes)}">${esc(c.notes)}</td>
@@ -1045,6 +1047,11 @@ function showModal(company) {
       <input class="field-input" id="f-followup" placeholder="YYYY-MM-DD" value="${esc(company?.followup_at ? company.followup_at.slice(0,10) : '')}" />
     </div>
     <div class="field-group">
+      <label class="field-label">${t('f_next_action_note')}</label>
+      <p class="field-hint">${t('f_next_action_hint')}</p>
+      <input class="field-input" id="f-next-action-note" value="${esc(company?.next_action_note||'')}" />
+    </div>
+    <div class="field-group">
       <label class="field-label">${t('f_notes')}</label>
       <textarea class="field-textarea" id="f-notes">${esc(company?.notes||'')}</textarea>
     </div>
@@ -1109,6 +1116,7 @@ function showModal(company) {
       service:       qs('#f-service').value,
       assigned_to:   qs('#f-owner').value,
       followup_at:   fu || null,
+      next_action_note: qs('#f-next-action-note').value.trim() || null,
       notes:         qs('#f-notes').value.trim(),
     }, state.editingId)
     if (ok) hideModal()
@@ -1193,6 +1201,7 @@ function showViewOverlay(company) {
     <div class="view-row"><span class="view-label">${t('f_status')}</span><span class="view-value"><span class="status-badge ${s.cls}">${s.label}</span></span></div>
     <div class="view-row"><span class="view-label">${t('f_owner')}</span><span class="view-value">${esc(assignedProfile?.full_name) || '—'}</span></div>
     <div class="view-row"><span class="view-label">${t('f_followup')}</span><span class="view-value">${esc(fuDate) || '—'}</span></div>
+    <div class="view-row"><span class="view-label">${t('f_next_action_note')}</span><span class="view-value">${esc(company.next_action_note) || '—'}</span></div>
     <div class="view-row view-notes"><span class="view-label">${t('f_notes')}</span><div class="view-value-block">${esc(company.notes) || '—'}</div></div>
     <div class="view-row"><span class="view-label">${t('col_by')}</span><span class="view-value">${esc(modProfile?.full_name) || '—'}</span></div>
     <div class="view-row"><span class="view-label">${t('col_updated')}</span><span class="view-value">${esc((company.updated_at||'').slice(0,16).replace('T',' '))}</span></div>

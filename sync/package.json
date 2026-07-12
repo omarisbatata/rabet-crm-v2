@@ -2,9 +2,10 @@
   "name": "rabet-crm-gmail-sync",
   "private": true,
   "type": "module",
-  "description": "Scheduled IMAP poll that syncs shalakomar9@gmail.com into rabet-crm-v2's Supabase emails table.",
+  "description": "Scheduled GitHub Actions scripts for rabet-crm-v2: Gmail inbound sync (sync-emails.mjs) and the owner's daily overdue-followup digest (daily-digest.mjs).",
   "dependencies": {
     "imapflow": "^1.0.164",
-    "mailparser": "^3.7.1"
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.14"
   }
 }

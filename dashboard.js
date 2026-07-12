@@ -15,7 +15,11 @@ en: {
   lang_switch: 'العربية',
   loading: 'Loading…',
   tab_overview: 'Overview',
+  tab_followups: 'Follow-ups',
   tab_attendance: 'Attendance',
+  col_company: 'Company', col_assignee: 'Assigned To', col_next_action: 'Next Action', col_note: 'Note',
+  followups_empty: 'Nothing overdue or due today. Nice.',
+  followup_overdue: 'Overdue', followup_due_today: 'Due Today',
   range_from: 'From',
   range_to: 'To',
   section_finance: 'Finance',
@@ -45,7 +49,11 @@ ar: {
   lang_switch: 'English',
   loading: 'جارٍ التحميل…',
   tab_overview: 'نظرة عامة',
+  tab_followups: 'المتابعات',
   tab_attendance: 'الحضور',
+  col_company: 'الشركة', col_assignee: 'المسؤول', col_next_action: 'الإجراء التالي', col_note: 'ملاحظة',
+  followups_empty: 'لا توجد متابعات متأخرة أو مستحقة اليوم.',
+  followup_overdue: 'متأخرة', followup_due_today: 'مستحقة اليوم',
   range_from: 'من',
   range_to: 'إلى',
   section_finance: 'المالية',
@@ -93,6 +101,7 @@ function monthRange() {
 const t   = key => T[lang][key] || key
 const qs  = sel => document.querySelector(sel)
 const qsa = sel => document.querySelectorAll(sel)
+const today = () => new Date().toISOString().slice(0, 10)
 
 function esc(str) {
   if (!str && str !== 0) return ''
@@ -120,6 +129,7 @@ function applyLang() {
   qs('#btn-db-back').textContent = t('back_to_crm')
   qs('#btn-db-lang').textContent = t('lang_switch')
   qs('#db-tab-overview').textContent   = t('tab_overview')
+  qs('#db-tab-followups').textContent  = t('tab_followups')
   qs('#db-tab-attendance').textContent = t('tab_attendance')
 }
 
@@ -133,6 +143,7 @@ async function init() {
     renderActiveTab()
   })
   qs('#db-tab-overview').addEventListener('click', () => switchTab('overview'))
+  qs('#db-tab-followups').addEventListener('click', () => switchTab('followups'))
   qs('#db-tab-attendance').addEventListener('click', () => switchTab('attendance'))
 
   qs('#db-status').textContent = t('loading')
@@ -161,7 +172,9 @@ async function loadProfiles() {
 }
 
 async function loadCompanies() {
-  const { data } = await sb.from('companies').select('id, name').order('name')
+  const { data } = await sb.from('companies')
+    .select('id, name, stage, assigned_to, followup_at, next_action_note')
+    .order('name')
   companies = data || []
 }
 
@@ -187,16 +200,49 @@ async function loadSessions() {
 
 function switchTab(tab) {
   activeTab = tab
-  qs('#db-tab-overview').classList.toggle('active', tab === 'overview')
-  qs('#db-tab-attendance').classList.toggle('active', tab === 'attendance')
-  qs('#db-overview').classList.toggle('hidden', tab !== 'overview')
-  qs('#db-attendance').classList.toggle('hidden', tab !== 'attendance')
+  ;['overview','followups','attendance'].forEach(name => {
+    qs(`#db-tab-${name}`).classList.toggle('active', name === tab)
+    qs(`#db-${name}`).classList.toggle('hidden', name !== tab)
+  })
   renderActiveTab()
 }
 
 function renderActiveTab() {
   if (activeTab === 'overview') renderOverview()
+  else if (activeTab === 'followups') renderFollowups()
   else renderAttendanceTab()
+}
+
+// ── Follow-ups: overdue + due-today companies ───────────────────────────────
+function renderFollowups() {
+  const wrap = qs('#db-followups')
+  const tod = today()
+
+  const due = companies
+    .filter(c => c.followup_at && c.stage !== 'closed_won' && c.stage !== 'dead')
+    .map(c => ({ ...c, fuDate: c.followup_at.slice(0, 10) }))
+    .filter(c => c.fuDate <= tod)
+    .sort((a, b) => a.fuDate.localeCompare(b.fuDate))
+
+  const rowsHtml = due.length ? due.map(c => `
+    <tr>
+      <td>${esc(c.name)}</td>
+      <td style="color:${c.fuDate < tod ? '#F43F5E' : '#F59E0B'}">${c.fuDate < tod ? t('followup_overdue') : t('followup_due_today')} — ${esc(c.fuDate)}</td>
+      <td>${esc(profileMap[c.assigned_to]?.full_name || '')}</td>
+      <td>${esc(c.next_action_note || '')}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="4" class="field-hint">${t('followups_empty')}</td></tr>`
+
+  wrap.innerHTML = `
+    <div class="db-client-table-wrap">
+      <table class="db-client-table">
+        <thead><tr>
+          <th>${t('col_company')}</th><th>${t('col_next_action')}</th><th>${t('col_assignee')}</th><th>${t('col_note')}</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  `
 }
 
 // ── Overview: finance totals + client breakdown + hours panel ───────────────
