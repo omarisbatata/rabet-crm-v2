@@ -91,11 +91,15 @@ let sessions   = []
 let filters = { ...monthRange() }
 
 function monthRange() {
+  // Build the YYYY-MM-DD strings from local date parts directly — going
+  // through toISOString() after constructing a local-midnight Date shifts
+  // both ends by a day in any UTC+ timezone (e.g. Damascus), silently
+  // narrowing "current month" to something like the 30th-to-30th.
   const now = new Date()
-  const first = new Date(now.getFullYear(), now.getMonth(), 1)
-  const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  const fmt = d => d.toISOString().slice(0, 10)
-  return { from: fmt(first), to: fmt(last) }
+  const y = now.getFullYear(), m = now.getMonth()
+  const pad = n => String(n).padStart(2, '0')
+  const lastDay = new Date(y, m + 1, 0).getDate()
+  return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(lastDay)}` }
 }
 
 const t   = key => T[lang][key] || key

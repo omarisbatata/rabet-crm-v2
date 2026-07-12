@@ -9,9 +9,10 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **Schema + RLS:** applied (`supabase/migrations/0001_init.sql`, `0002a_add_viewer_value.sql`,
   `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`,
   `0004_add_income_type.sql`, `0005_attendance_and_login_sessions.sql`,
-  `0006_finance_company_link.sql`, `0007a_add_it_value.sql`, `0007_it_module.sql`). Access-test
-  matrix passing 66/66 (`supabase/tests/access-matrix.mjs`, not yet extended for any of the tables
-  added after it — see "Known gap" below).
+  `0006_finance_company_link.sql`, `0007a_add_it_value.sql`, `0007_it_module.sql`,
+  `0008_next_action_note.sql`, `0009_attendance_self_service.sql`). Access-test matrix passing
+  66/66 (`supabase/tests/access-matrix.mjs`, not yet extended for any of the tables added after it
+  — see "Known gap" below).
 - **Attendance + login-session tracking (owner-only), and a per-client finance breakdown:**
   - `attendance_entries` — manual sign-in/sign-out log entered by the owner via the new Dashboard page.
     Owner-only for every operation (select/insert/update/delete); nobody else, including the person
@@ -30,6 +31,21 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   - **Known gap:** `supabase/tests/access-matrix.mjs` has not been extended to cover
     `attendance_entries` or `login_sessions` yet — do this before treating those RLS policies as
     verified, same as every other table in this project.
+  - **Reversed the "owner-only, no exceptions" design** (`0009_attendance_self_service.sql`): the
+    original owner-only-entry design meant nobody actually used it, so there's now a self-service
+    Sign In/Sign Out button in the main app's sidebar (`#btn-shift` / `loadMyShift`/
+    `renderShiftButton` in `app.js`), visible to every role. Each person can insert their own
+    sign-in and close their own still-open sign-out (`attendance_entries_select_own`/`insert_own`/
+    `update_own_open`), but still can't see anyone else's attendance or edit a shift once it's
+    closed — those stay owner-only via the original `attendance_entries_owner_all` policy (all
+    additive; Postgres ORs permissive policies together). Omar's explicit call, made when the
+    Dashboard's Hours panel was reported as "always showing 00" — the real cause was that the
+    manual-entry-only design meant `attendance_entries` was nearly empty, not a rendering bug.
+  - **Also fixed while investigating that report:** `dashboard.js`'s `monthRange()` built its
+    default "current month" range by constructing a local-midnight `Date` and calling
+    `toISOString()`, which silently shifts both ends back a day in any UTC+ timezone (Damascus
+    included) — e.g. "July" became `06-30` to `07-30`. Fixed to build the `YYYY-MM-DD` strings
+    from local date parts directly, no UTC conversion involved.
 - **IT module** — new `it` role (added the same two-step way as `viewer`/`accountant`: an
   `ALTER TYPE ADD VALUE` migration committed alone before anything references it), scoped like
   Finance/`accountant` — full access for `it`/`owner`, narrow self-service for everyone else:

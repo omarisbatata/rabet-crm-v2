@@ -200,6 +200,19 @@ input, select { font-family: inherit; }
 .stat-name { font-size: 12px; color: var(--muted); }
 .stat-count { font-size: 12px; font-weight: 700; }
 
+/* Shift clock */
+.shift-btn {
+  width: 100%; padding: 10px 12px;
+  border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+  font-size: 13px; font-weight: 600;
+  transition: all .12s;
+  background: var(--surface); color: var(--success);
+}
+.shift-btn:hover { border-color: currentColor; }
+.shift-btn.signed-in {
+  background: rgba(244,63,94,.12); border-color: var(--danger); color: var(--danger);
+}
+
 /* Nav */
 .sb-nav { display: flex; flex-direction: column; padding: 4px 0; }
 .nav-btn {

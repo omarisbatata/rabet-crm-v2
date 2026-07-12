@@ -131,6 +131,8 @@ en: {
   dashboard_nav: '◆ Dashboard',
   it_nav: '⚙ IT',
   ithelp_nav: '? Get IT Help',
+  shift_sign_in: '● Sign In',
+  shift_sign_out: '■ Sign Out',
 },
 ar: {
   login_title: 'تسجيل الدخول',
@@ -220,6 +222,8 @@ ar: {
   dashboard_nav: '◆ لوحة التحكم',
   it_nav: '⚙ تقنية المعلومات',
   ithelp_nav: '? طلب مساعدة تقنية',
+  shift_sign_in: '● حضور',
+  shift_sign_out: '■ انصراف',
 },
 }
 
@@ -374,9 +378,15 @@ async function bootApp() {
   if (isOwner()) await refreshInboxBadge()
   await ensureLoginSession()
   startHeartbeatLoop()
+  await loadMyShift()
+  renderShiftButton()
   // Realtime isn't wired up (RLS-aware realtime is more moving parts than this
   // 3-person team needs) — poll for changes made by other team members instead.
-  setInterval(() => { loadCompanies(true); if (isOwner()) refreshInboxBadge() }, 15000)
+  setInterval(() => {
+    loadCompanies(true)
+    if (isOwner()) refreshInboxBadge()
+    loadMyShift().then(renderShiftButton)
+  }, 15000)
 }
 
 // ── Login session tracking (feeds the owner dashboard's CRM login hours) ────
@@ -434,6 +444,52 @@ function stopHeartbeatLoop() {
   heartbeatTimer = null
   currentSessionId = null
 }
+
+// ── Shift clock (self-service attendance) ────────────────────────────────────
+// Every role gets this — it's a personal sign-in/sign-out, not the owner's
+// admin attendance log. Each person can only ever see/close their own open
+// shift (enforced by RLS, not just this UI).
+let myOpenShift = null
+
+async function loadMyShift() {
+  const { data, error } = await sb.from('attendance_entries')
+    .select('*')
+    .eq('profile_id', state.user.id)
+    .is('sign_out_at', null)
+    .order('sign_in_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  myOpenShift = error ? null : data
+}
+
+function renderShiftButton() {
+  const btn = qs('#btn-shift')
+  if (!btn) return
+  if (myOpenShift) {
+    const since = (myOpenShift.sign_in_at || '').slice(11, 16)
+    btn.textContent = `${t('shift_sign_out')} (${since})`
+    btn.classList.add('signed-in')
+  } else {
+    btn.textContent = t('shift_sign_in')
+    btn.classList.remove('signed-in')
+  }
+}
+
+qs('#btn-shift').addEventListener('click', async () => {
+  const btn = qs('#btn-shift')
+  btn.disabled = true
+  if (myOpenShift) {
+    await sb.from('attendance_entries')
+      .update({ sign_out_at: new Date().toISOString() })
+      .eq('id', myOpenShift.id)
+  } else {
+    await sb.from('attendance_entries')
+      .insert({ profile_id: state.user.id, sign_in_at: new Date().toISOString() })
+  }
+  await loadMyShift()
+  renderShiftButton()
+  btn.disabled = false
+})
 
 async function loadProfiles() {
   const { data, error } = await sb.from('profiles').select('*').order('created_at')
@@ -1322,6 +1378,7 @@ function toggleLang() {
   buildSidebar()
   buildTopbar()
   buildTableHead()
+  renderShiftButton()
   render()
 }
 
