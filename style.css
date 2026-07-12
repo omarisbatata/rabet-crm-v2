@@ -360,7 +360,7 @@ tbody td.col-status { white-space: nowrap; }
 #sbar-msg { font-size: 12px; color: var(--muted); }
 
 /* ── Modal ──────────────────────────────────────────────────────────────────── */
-#modal-overlay, #settings-overlay, #templates-overlay, #view-overlay {
+#modal-overlay, #settings-overlay, #templates-overlay, #view-overlay, #schedule-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,.65);
   display: flex; align-items: center; justify-content: center;
@@ -569,6 +569,41 @@ tbody td.col-status { white-space: nowrap; }
 
 /* ── Templates ──────────────────────────────────────────────────────────── */
 .templates-card { width: 640px; max-width: 95vw; }
+
+/* ── Schedule ───────────────────────────────────────────────────────────── */
+.schedule-card { width: 760px; max-width: 95vw; }
+.schedule-nav-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 16px;
+}
+.schedule-week-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.schedule-note { font-size: 12px; color: var(--accent2); margin-bottom: 12px; }
+.schedule-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+.schedule-table { width: 100%; border-collapse: collapse; }
+.schedule-table th {
+  background: var(--panel); color: var(--muted);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.schedule-table td {
+  padding: 9px 10px; font-size: 13px; color: var(--text);
+  border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.schedule-table tr:last-child td { border-bottom: none; }
+.schedule-day-cell { font-weight: 600; white-space: nowrap; }
+.schedule-day-date { font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.schedule-edit-scroll { overflow-x: auto; margin-bottom: 16px; }
+.schedule-edit-table { min-width: 560px; }
+.schedule-edit-table .field-select { min-width: 100px; margin-bottom: 0; }
+.schedule-repeat-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+  margin-top: 4px;
+}
+.schedule-repeat-row input { cursor: pointer; }
+
+[dir="rtl"] .schedule-table th, [dir="rtl"] .schedule-table td { text-align: right; }
 
 /* ── Finance page (standalone tab, not a modal) ──────────────────────────── */
 #finance-page, #dashboard-page {

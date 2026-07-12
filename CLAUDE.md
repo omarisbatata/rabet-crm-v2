@@ -10,9 +10,35 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   `0002_viewer_role.sql`, `0003a_add_accountant_value.sql`, `0003_finance.sql`,
   `0004_add_income_type.sql`, `0005_attendance_and_login_sessions.sql`,
   `0006_finance_company_link.sql`, `0007a_add_it_value.sql`, `0007_it_module.sql`,
-  `0008_next_action_note.sql`, `0009_attendance_self_service.sql`). Access-test matrix passing
-  66/66 (`supabase/tests/access-matrix.mjs`, not yet extended for any of the tables added after it
-  — see "Known gap" below).
+  `0008_next_action_note.sql`, `0009_attendance_self_service.sql`,
+  `0010_schedules.sql`). Access-test matrix passing 80/80 (`supabase/tests/access-matrix.mjs`) —
+  `schedules` coverage was added alongside its migration; `attendance_entries`/`login_sessions`
+  are still the outstanding gap (see "Known gap" below), unchanged by this round.
+- **Schedule module** (`0010_schedules.sql`) — weekly shift roster, one row per
+  (`week_start_date`, `user_id`, `day_of_week`), `day_of_week` 0=Sat..6=Fri to match the default
+  Sat–Thu work week (Friday off). `shift` is `morning` (7:00–12:00) / `afternoon` (12:00–17:00) /
+  `off`, enforced by a check constraint that `off` carries null start/end times and the other two
+  don't. RLS: any authenticated role can `select` the whole roster; `insert`/`update`/`delete` are
+  owner-only, straight role check, no approval/request step (mirrors `companies_delete_owner`'s
+  shape, just widened to every write). Lives as a modal overlay in `index.html`/`app.js` (like
+  Templates/Inbox), not a standalone gated page like Finance/IT/Dashboard, since it's meant to be
+  visible to every role — the "Schedule" nav button has no role-based `hidden` toggle; only the
+  in-modal Edit button and the dropdown grid are gated to `isOwner()`.
+  - **"Repeat" isn't a separate table or column resolved in SQL** — `is_repeating` lives on every
+    row of a saved week (all rows for one `week_start_date` always share the same value, set
+    together on save). A week with no explicit rows of its own inherits the pattern from the
+    *closest earlier week that has rows*, but only if that week's rows were saved with
+    `is_repeating = true`. All of that resolution happens client-side in `app.js`
+    (`resolveScheduleWeek`) by fetching the whole `schedules` table once per modal-open (small
+    team, small history — no pagination needed yet) and walking it in memory; the table itself
+    just stores explicit per-week rows. Saving a week always deletes-then-reinserts a full
+    7-day × all-profiles grid (including explicit `off` rows) — that full row set is what makes a
+    week "explicit" and able to override/restart a repeat chain, even if every cell in it is off.
+  - Owner's edit grid is days (rows) × every profile (columns), each cell a shift `<select>`,
+    prefilled from whatever `resolveScheduleWeek` resolves for that week (explicit or inherited) so
+    editing an inherited week starts from its actual current pattern, not a blank slate. The
+    read-only view (both what non-owners see, and what the owner sees before hitting Edit) is
+    inverted — days (rows) × Morning/Afternoon/Off (columns), team member names in the cells.
 - **Attendance + login-session tracking, and a per-client finance breakdown:**
   - `attendance_entries` — started owner-only-entry (see Dashboard's Attendance tab), then gained
     self-service on top (`0009_attendance_self_service.sql` — see its own bullet below): everyone

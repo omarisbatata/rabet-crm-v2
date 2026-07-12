@@ -42,6 +42,16 @@ const SERVICES_AR = [
   'هوية بصرية','تصوير ومحتوى','تحسين محركات البحث','متعدد / غير محدد',
 ]
 
+// day_of_week: 0=Sat..6=Fri (default work week Sat–Thu, Friday off)
+const DAY_NAMES_EN = ['Saturday','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday']
+const DAY_NAMES_AR = ['السبت','الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة']
+const SHIFT_KEYS  = ['morning', 'afternoon', 'off']
+const SHIFT_TIMES = {
+  morning:   ['07:00:00', '12:00:00'],
+  afternoon: ['12:00:00', '17:00:00'],
+  off:       [null, null],
+}
+
 const T = {
 en: {
   login_title: 'Sign in',
@@ -133,6 +143,21 @@ en: {
   ithelp_nav: '? Get IT Help',
   shift_sign_in: '● Sign In',
   shift_sign_out: '■ Sign Out',
+  schedule_nav: '📅 Schedule',
+  schedule_week_of: 'Week of',
+  schedule_prev: '‹ Prev',
+  schedule_next: 'Next ›',
+  schedule_repeat: 'Repeat this week',
+  schedule_repeat_hint: "Auto-applies to future weeks until you edit one of them specifically — editing a week breaks the repeat from that week on.",
+  schedule_inherited_prefix: '↺ Repeating pattern from week of',
+  schedule_empty: 'No schedule set for this week yet.',
+  schedule_col_morning: 'Morning (7:00–12:00)',
+  schedule_col_afternoon: 'Afternoon (12:00–17:00)',
+  schedule_col_off: 'Off',
+  shift_morning: 'Morning',
+  shift_afternoon: 'Afternoon',
+  shift_off: 'Off',
+  schedule_saved: 'Schedule saved.',
 },
 ar: {
   login_title: 'تسجيل الدخول',
@@ -224,6 +249,21 @@ ar: {
   ithelp_nav: '? طلب مساعدة تقنية',
   shift_sign_in: '● حضور',
   shift_sign_out: '■ انصراف',
+  schedule_nav: '📅 الجدول',
+  schedule_week_of: 'أسبوع',
+  schedule_prev: '‹ السابق',
+  schedule_next: 'التالي ›',
+  schedule_repeat: 'تكرار هذا الأسبوع',
+  schedule_repeat_hint: 'يُطبَّق تلقائياً على الأسابيع القادمة حتى تُعدّل أسبوعاً بعينه — تعديل أسبوع يوقف التكرار من ذلك الأسبوع فصاعداً.',
+  schedule_inherited_prefix: '↺ نمط متكرر من أسبوع',
+  schedule_empty: 'لم يُحدَّد جدول لهذا الأسبوع بعد.',
+  schedule_col_morning: 'صباحي (7:00–12:00)',
+  schedule_col_afternoon: 'مسائي (12:00–17:00)',
+  schedule_col_off: 'عطلة',
+  shift_morning: 'صباحي',
+  shift_afternoon: 'مسائي',
+  shift_off: 'عطلة',
+  schedule_saved: 'تم حفظ الجدول.',
 },
 }
 
@@ -236,6 +276,9 @@ let state = {
   companies: [],
   emails:    [],       // unlinked emails
   templates: [],
+  schedules: [],       // every schedule row (small team/history, fetched whole)
+  scheduleWeekStart: null,  // YYYY-MM-DD, the Saturday of the week in view
+  scheduleEditing: false,
   selectedEmailId: null,
   lang:      localStorage.getItem('crm_lang') || 'en',
   selected:  null,    // selected company id
@@ -799,6 +842,200 @@ qs('#btn-templates').addEventListener('click', showTemplates)
 qs('#templates-close').addEventListener('click', () => qs('#templates-overlay').classList.add('hidden'))
 qs('#templates-overlay').addEventListener('click', e => { if (e.target === qs('#templates-overlay')) qs('#templates-overlay').classList.add('hidden') })
 
+// ── Schedule ──────────────────────────────────────────────────────────────────
+// Visible to every role (read-only grid); only owner gets the edit form.
+// "Repeat" isn't resolved in SQL — state.schedules holds every row (small
+// team, small history) and resolveScheduleWeek() walks it client-side: a
+// week with no rows of its own inherits the closest earlier week's pattern,
+// but only if that week was saved with is_repeating = true. The moment the
+// owner saves an explicit row set for a later week, that becomes the new
+// closest week and the chain restarts from there — matches the migration's
+// header comment in 0010_schedules.sql.
+function pad2(n) { return String(n).padStart(2, '0') }
+function scheduleDateStr(d) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}` }
+function scheduleParseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d) }
+function scheduleAddDays(s, n) { const d = scheduleParseDate(s); d.setDate(d.getDate()+n); return scheduleDateStr(d) }
+// JS getDay(): Sun=0..Sat=6. Our day_of_week: Sat=0..Fri=6, i.e. (jsDay+1)%7.
+function scheduleSaturdayOf(d) {
+  const offset = (d.getDay() + 1) % 7
+  const sat = new Date(d)
+  sat.setDate(d.getDate() - offset)
+  return scheduleDateStr(sat)
+}
+
+async function loadSchedules() {
+  const { data, error } = await sb.from('schedules').select('*')
+  if (error) { sbar('Error: ' + error.message); return }
+  state.schedules = data || []
+}
+
+function resolveScheduleWeek(weekStart) {
+  const direct = state.schedules.filter(r => r.week_start_date === weekStart)
+  if (direct.length) return { rows: direct, mode: 'explicit', sourceWeek: weekStart }
+
+  const pastWeeks = [...new Set(
+    state.schedules.filter(r => r.week_start_date < weekStart).map(r => r.week_start_date)
+  )].sort().reverse()
+  if (!pastWeeks.length) return { rows: [], mode: 'empty' }
+
+  const w0 = pastWeeks[0]
+  const w0Rows = state.schedules.filter(r => r.week_start_date === w0)
+  if (w0Rows.length && w0Rows[0].is_repeating) return { rows: w0Rows, mode: 'inherited', sourceWeek: w0 }
+  return { rows: [], mode: 'empty' }
+}
+
+async function showSchedule() {
+  qs('#schedule-overlay').classList.remove('hidden')
+  if (!state.scheduleWeekStart) state.scheduleWeekStart = scheduleSaturdayOf(new Date())
+  state.scheduleEditing = false
+  await loadSchedules()
+  renderSchedule()
+}
+
+function hideSchedule() {
+  qs('#schedule-overlay').classList.add('hidden')
+  state.scheduleEditing = false
+}
+
+function renderSchedule() {
+  const body = qs('#schedule-body')
+  const weekStart = state.scheduleWeekStart
+  const weekEnd   = scheduleAddDays(weekStart, 6)
+  const days      = state.lang === 'ar' ? DAY_NAMES_AR : DAY_NAMES_EN
+
+  const nav = `
+    <div class="schedule-nav-row">
+      <button class="btn-ghost" id="sched-prev" style="width:auto;padding:7px 14px;">${t('schedule_prev')}</button>
+      <div class="schedule-week-label">${t('schedule_week_of')} ${weekStart} — ${weekEnd}</div>
+      <button class="btn-ghost" id="sched-next" style="width:auto;padding:7px 14px;">${t('schedule_next')}</button>
+    </div>
+  `
+
+  body.innerHTML = nav + (state.scheduleEditing
+    ? renderScheduleEditForm(weekStart, days)
+    : renderScheduleView(weekStart, days))
+
+  qs('#sched-prev').addEventListener('click', () => {
+    state.scheduleWeekStart = scheduleAddDays(state.scheduleWeekStart, -7)
+    state.scheduleEditing = false
+    renderSchedule()
+  })
+  qs('#sched-next').addEventListener('click', () => {
+    state.scheduleWeekStart = scheduleAddDays(state.scheduleWeekStart, 7)
+    state.scheduleEditing = false
+    renderSchedule()
+  })
+
+  if (state.scheduleEditing) wireScheduleEditForm(weekStart)
+  else wireScheduleViewControls()
+}
+
+function renderScheduleView(weekStart, days) {
+  const resolved = resolveScheduleWeek(weekStart)
+  const note = resolved.mode === 'inherited'
+    ? `<div class="schedule-note">${t('schedule_inherited_prefix')} ${resolved.sourceWeek}</div>`
+    : ''
+  const editBtn = isOwner()
+    ? `<button class="btn-ghost" id="sched-edit-btn" style="width:auto;padding:7px 14px;margin-bottom:12px;">${t('edit')}</button>`
+    : ''
+
+  if (!resolved.rows.length) {
+    return note + editBtn + `<div class="schedule-empty">${t('schedule_empty')}</div>`
+  }
+
+  const rowsHtml = days.map((label, d) => {
+    const dayDate = scheduleAddDays(weekStart, d)
+    const cellsHtml = SHIFT_KEYS.map(shiftKey => {
+      const names = resolved.rows
+        .filter(r => r.day_of_week === d && r.shift === shiftKey)
+        .map(r => esc(state.profileMap[r.user_id]?.full_name || '—'))
+      return `<td>${names.length ? names.join(', ') : '—'}</td>`
+    }).join('')
+    return `<tr><td class="schedule-day-cell">${esc(label)}<div class="schedule-day-date">${dayDate}</div></td>${cellsHtml}</tr>`
+  }).join('')
+
+  return note + editBtn + `
+    <table class="schedule-table">
+      <thead><tr><th></th><th>${t('schedule_col_morning')}</th><th>${t('schedule_col_afternoon')}</th><th>${t('schedule_col_off')}</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `
+}
+
+function wireScheduleViewControls() {
+  qs('#sched-edit-btn')?.addEventListener('click', () => { state.scheduleEditing = true; renderSchedule() })
+}
+
+function renderScheduleEditForm(weekStart, days) {
+  const resolved = resolveScheduleWeek(weekStart)
+  const draft = {}
+  resolved.rows.forEach(r => { draft[`${r.day_of_week}-${r.user_id}`] = r.shift })
+  const repeatDefault = resolved.mode === 'explicit' && resolved.rows[0]?.is_repeating
+
+  const headerCells = state.profiles.map(p => `<th>${esc(p.full_name)}</th>`).join('')
+  const rowsHtml = days.map((label, d) => {
+    const dayDate = scheduleAddDays(weekStart, d)
+    const cells = state.profiles.map(p => {
+      const cur = draft[`${d}-${p.id}`] || 'off'
+      const opts = SHIFT_KEYS.map(sk => `<option value="${sk}"${cur===sk?' selected':''}>${t('shift_'+sk)}</option>`).join('')
+      return `<td><select class="field-select schedule-cell-select" data-day="${d}" data-user="${p.id}">${opts}</select></td>`
+    }).join('')
+    return `<tr><td class="schedule-day-cell">${esc(label)}<div class="schedule-day-date">${dayDate}</div></td>${cells}</tr>`
+  }).join('')
+
+  return `
+    <div class="schedule-edit-scroll">
+      <table class="schedule-table schedule-edit-table">
+        <thead><tr><th></th>${headerCells}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    <label class="schedule-repeat-row">
+      <input type="checkbox" id="sched-repeat-toggle" ${repeatDefault ? 'checked' : ''} />
+      <span>${t('schedule_repeat')}</span>
+    </label>
+    <p class="field-hint">${t('schedule_repeat_hint')}</p>
+    <div class="modal-footer">
+      <button class="btn-primary" id="sched-save-btn" style="width:auto;padding:9px 16px;">${t('save')}</button>
+      <button class="btn-ghost" id="sched-cancel-btn" style="width:auto;padding:9px 16px;">${t('cancel')}</button>
+    </div>
+  `
+}
+
+function wireScheduleEditForm(weekStart) {
+  qs('#sched-cancel-btn').addEventListener('click', () => { state.scheduleEditing = false; renderSchedule() })
+  qs('#sched-save-btn').addEventListener('click', async () => {
+    const btn = qs('#sched-save-btn')
+    btn.disabled = true
+    const repeat = qs('#sched-repeat-toggle').checked
+    const payload = []
+    state.profiles.forEach(p => {
+      for (let d = 0; d < 7; d++) {
+        const sel = qs(`.schedule-cell-select[data-day="${d}"][data-user="${p.id}"]`)
+        const shift = sel ? sel.value : 'off'
+        const [start_time, end_time] = SHIFT_TIMES[shift]
+        payload.push({
+          week_start_date: weekStart, user_id: p.id, day_of_week: d,
+          shift, start_time, end_time, is_repeating: repeat,
+        })
+      }
+    })
+    const { error: delErr } = await sb.from('schedules').delete().eq('week_start_date', weekStart)
+    if (delErr) { sbar(isOwner() ? 'Error: ' + delErr.message : t('owner_only')); btn.disabled = false; return }
+    const { error: insErr } = await sb.from('schedules').insert(payload)
+    if (insErr) { sbar('Error: ' + insErr.message); btn.disabled = false; return }
+    showToast(t('schedule_saved'))
+    state.scheduleEditing = false
+    await loadSchedules()
+    renderSchedule()
+  })
+}
+
+qs('#btn-schedule').addEventListener('click', showSchedule)
+qs('#schedule-close').addEventListener('click', hideSchedule)
+qs('#schedule-overlay').addEventListener('click', e => { if (e.target === qs('#schedule-overlay')) hideSchedule() })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideSchedule() })
+
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
   renderTable()
@@ -989,7 +1226,8 @@ function setupKeyboard() {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
     if (!qs('#modal-overlay').classList.contains('hidden') ||
         !qs('#settings-overlay').classList.contains('hidden') ||
-        !qs('#view-overlay').classList.contains('hidden')) return
+        !qs('#view-overlay').classList.contains('hidden') ||
+        !qs('#schedule-overlay').classList.contains('hidden')) return
     if ((e.key === 'n' || e.key === 'N') && !isViewer()) showModal(null)
     if (e.key === 'e' || e.key === 'E') {
       const c = state.companies.find(x => x.id === state.selected)

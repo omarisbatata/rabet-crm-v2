@@ -347,6 +347,72 @@ async function main() {
   // cleanup any rows left by the checks above (accountant's salary insert, etc.)
   await rest(`finance_entries?payee=like.Access*Test*`, { method: 'DELETE', token: SERVICE })
 
+  // ── schedules ───────────────────────────────────────────────────────────
+  console.log('\n--- schedules ---')
+  const SCHED_WEEK = '2099-01-03' // far-future Saturday, never a real week
+
+  for (const [name, r] of Object.entries(roles)) {
+    const res = await rest('schedules?select=id', { token: r.token })
+    check(`schedules select (${name})`, name !== 'anon', res.ok)
+  }
+  {
+    const res = await rest('schedules', {
+      method: 'POST', token: teammate.token,
+      body: { week_start_date: SCHED_WEEK, user_id: teammate.userId, day_of_week: 0, shift: 'morning', start_time: '07:00:00', end_time: '12:00:00' },
+    })
+    check('schedules insert denied (teammate)', true, !res.ok || res.rowCount === 0)
+  }
+  {
+    const res = await rest('schedules', {
+      method: 'POST', token: viewer.token,
+      body: { week_start_date: SCHED_WEEK, user_id: viewer.userId, day_of_week: 0, shift: 'morning', start_time: '07:00:00', end_time: '12:00:00' },
+    })
+    check('schedules insert denied (viewer)', true, !res.ok || res.rowCount === 0)
+  }
+  {
+    const res = await rest('schedules', {
+      method: 'POST', token: null,
+      body: { week_start_date: SCHED_WEEK, user_id: teammate.userId, day_of_week: 0, shift: 'morning', start_time: '07:00:00', end_time: '12:00:00' },
+    })
+    check('schedules insert denied (anon)', true, !res.ok)
+  }
+  let scheduleId
+  {
+    const res = await rest('schedules', {
+      method: 'POST', token: owner.token,
+      body: { week_start_date: SCHED_WEEK, user_id: teammate.userId, day_of_week: 0, shift: 'morning', start_time: '07:00:00', end_time: '12:00:00', is_repeating: true },
+    })
+    check('schedules insert allowed (owner)', true, res.ok)
+    scheduleId = res.json?.[0]?.id
+  }
+  {
+    // check constraint: shift='off' must carry null start/end times
+    const res = await rest('schedules', {
+      method: 'POST', token: owner.token,
+      body: { week_start_date: SCHED_WEEK, user_id: teammate.userId, day_of_week: 1, shift: 'off', start_time: '07:00:00', end_time: '12:00:00' },
+    })
+    check('schedules insert rejected by check constraint (off with times)', true, !res.ok)
+  }
+  if (scheduleId) {
+    const res = await rest(`schedules?id=eq.${scheduleId}`, { method: 'PATCH', token: teammate.token, body: { shift: 'off', start_time: null, end_time: null } })
+    check('schedules update denied (teammate)', true, res.rowCount === 0)
+  }
+  if (scheduleId) {
+    const res = await rest(`schedules?id=eq.${scheduleId}`, { method: 'PATCH', token: owner.token, body: { shift: 'afternoon', start_time: '12:00:00', end_time: '17:00:00' } })
+    check('schedules update allowed (owner)', true, res.ok && res.rowCount > 0)
+  }
+  if (scheduleId) {
+    const res = await rest(`schedules?id=eq.${scheduleId}`, { method: 'DELETE', token: teammate.token })
+    const stillThere = await rest(`schedules?id=eq.${scheduleId}&select=id`, { token: SERVICE })
+    check('schedules delete denied (teammate)', true, stillThere.rowCount === 1)
+  }
+  if (scheduleId) {
+    const res = await rest(`schedules?id=eq.${scheduleId}`, { method: 'DELETE', token: owner.token })
+    check('schedules delete allowed (owner)', true, res.ok)
+  }
+  // cleanup any rows left by the checks above
+  await rest(`schedules?week_start_date=eq.${SCHED_WEEK}`, { method: 'DELETE', token: SERVICE })
+
   console.log('\nDeleting accountant fixture account...')
   await deleteFixtureAccountant(accountantUserId)
 
