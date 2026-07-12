@@ -13,10 +13,11 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   `0008_next_action_note.sql`, `0009_attendance_self_service.sql`). Access-test matrix passing
   66/66 (`supabase/tests/access-matrix.mjs`, not yet extended for any of the tables added after it
   — see "Known gap" below).
-- **Attendance + login-session tracking (owner-only), and a per-client finance breakdown:**
-  - `attendance_entries` — manual sign-in/sign-out log entered by the owner via the new Dashboard page.
-    Owner-only for every operation (select/insert/update/delete); nobody else, including the person
-    the entry is about, can read it.
+- **Attendance + login-session tracking, and a per-client finance breakdown:**
+  - `attendance_entries` — started owner-only-entry (see Dashboard's Attendance tab), then gained
+    self-service on top (`0009_attendance_self_service.sql` — see its own bullet below): everyone
+    can clock their own shifts via the sidebar's Sign In/Sign Out button, but still can't see
+    anyone else's, and owner keeps full CRUD/visibility over all of it.
   - `login_sessions` — auto-tracked CRM usage. `app.js` inserts a row on first login (or resumes the
     existing one if the last heartbeat was under 15 min ago) and updates `last_heartbeat_at` every
     ~4 min while the tab is open (`ensureLoginSession`/`sendHeartbeat`/`startHeartbeatLoop`). A user
@@ -95,9 +96,13 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
   - Shared **viewer** (checkup-only, no add/edit/delete, enforced by RLS not just UI) — used by
     Taim Kiwan and Taim Al Saadi together — `admin@rabet-crm.local`
   - Zein — **accountant** (full CRUD on `finance_entries` only) — `Zeinn0there@rabetagency.com`
+  - "IT" — **it** role (full access to the IT module: `it_assets`/`it_equipment`/`it_tickets`/
+    `it_ticket_comments`/`it_messages`) — `AB5DR@rabetagency.com`. `full_name` is currently just
+    the placeholder "IT" (no real name was given when the account was created) — update
+    `profiles.full_name` if/when you want it to show a real name in the sidebar/tickets/chat.
   - All teammate/owner passwords were set directly via the admin API (no invite emails needed
     after the first one); credentials were emailed to each person via the CRM's own send-email
-    function.
+    function (the IT account's credentials were given directly to Claude by Omar in-session instead).
 - **Secrets:** local machine only, in `.env.local` (gitignored, never committed) — Supabase access
   token, DB password, project ref, anon key, service_role key, Gmail app password. Also set as a
   **GitHub Actions secret** (`SUPABASE_SERVICE_ROLE_KEY`, `GMAIL_APP_PASSWORD` on the repo) and a
@@ -105,9 +110,12 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **Applying migrations from this machine:** direct Postgres connections (port 5432/6543, both
   direct and pooler) are unreachable from this sandbox — `supabase db push` fails with a connection
   timeout/DNS error. What does work: the Supabase **Management API** over HTTPS
-  (`https://api.supabase.com/v1/projects/{ref}/database/query`, `Authorization: Bearer
-  $SUPABASE_ACCESS_TOKEN`), which runs arbitrary SQL against the live project and was used to apply
-  `0005`/`0006`. Prefer that path over `db push` here.
+  (`POST https://api.supabase.com/v1/projects/{ref}/database/query`, `Authorization: Bearer
+  $SUPABASE_ACCESS_TOKEN`, body `{"query": "<sql>"}`), which runs arbitrary SQL against the live
+  project and is how every migration from `0005` onward was applied. Prefer that path over
+  `db push` here. It runs the whole SQL file as one transaction — a mid-file error (e.g. `0007`'s
+  first attempt, which tried a subquery in a column `DEFAULT`) rolls back cleanly with nothing
+  partially applied, so it's safe to just fix the file and re-run the same request.
 - **Old project status:** the old Supabase project `uirdvnhafmuqtcsobyhr` was **paused** (not
   deleted) to free a free-tier project slot for this rebuild — explicitly requested by Omar,
   reversible any time from the Supabase dashboard. The old `rabet-crm-web` repo is untouched.
@@ -146,8 +154,10 @@ Real Supabase Auth (email + password), not the old custom `users` table + `crm_v
   via `supabase-js`'s built-in auth, which issues a JWT. Every RLS policy below reads
   `auth.uid()` / `auth.role()` from that JWT — no custom verification function needed.
 - A `public.profiles` table (1:1 with `auth.users`) carries app-specific fields: display name and
-  `role` (`'owner' | 'teammate' | 'viewer' | 'accountant'`). A trigger creates the profile row
-  automatically when a new `auth.users` row is inserted (i.e., when Omar invites someone).
+  `role` (`'owner' | 'teammate' | 'viewer' | 'accountant' | 'it'` — `accountant` and `it` were each
+  added later via their own `ALTER TYPE ADD VALUE` migration, see `0003a`/`0007a`). A trigger
+  creates the profile row automatically when a new `auth.users` row is inserted (i.e., when Omar
+  invites someone, or when an account is created directly via the admin API).
 - `viewer` is a read-only role added for shared/checkup-only accounts: select is allowed
   everywhere authenticated is, but insert/update on `companies`, `emails`, and `templates`
   additionally require the caller's profile role to be `owner` or `teammate` (see migration
@@ -450,9 +460,10 @@ just "update succeeds/fails" as a whole.
 `finance_entries` denies teammate/viewer entirely by design (no policy for either role) — this is
 the one table where `companies`/`emails`/`templates`-style baseline select access does not apply.
 
-Implemented and passing (46/46) in `supabase/tests/access-matrix.mjs` — mints real sessions via
-admin `generate_link` (magiclink) + verify, no passwords touched, so it never interferes with a
-pending invite/recovery link.
+Implemented and passing (66/66 as of the `accountant`/`viewer` additions — see "Known gap" at the
+top of this file for what's been added to the schema since without a matching matrix update) in
+`supabase/tests/access-matrix.mjs` — mints real sessions via admin `generate_link` (magiclink) +
+verify, no passwords touched, so it never interferes with a pending invite/recovery link.
 
 Write this as an actual test script (Node or Deno, using `@supabase/supabase-js` three times with
 three different auth contexts) before any UI code — per the build order below.
