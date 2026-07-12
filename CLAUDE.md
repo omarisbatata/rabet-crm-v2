@@ -97,9 +97,12 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
     Taim Kiwan and Taim Al Saadi together — `admin@rabet-crm.local`
   - Zein — **accountant** (full CRUD on `finance_entries` only) — `Zeinn0there@rabetagency.com`
   - "IT" — **it** role (full access to the IT module: `it_assets`/`it_equipment`/`it_tickets`/
-    `it_ticket_comments`/`it_messages`) — `AB5DR@rabetagency.com`. `full_name` is currently just
-    the placeholder "IT" (no real name was given when the account was created) — update
-    `profiles.full_name` if/when you want it to show a real name in the sidebar/tickets/chat.
+    `it_ticket_comments`/`it_messages`) — `IT@rabetagency.com` (replaced the earlier
+    `AB5DR@rabetagency.com` account; that auth user was deleted after reassigning its existing
+    `it_tickets`/`it_messages`/`login_sessions` rows to the new profile id, so no IT-module history
+    was lost). `full_name` is currently just the placeholder "IT" (no real name was given when the
+    account was created) — update `profiles.full_name` if/when you want it to show a real name in
+    the sidebar/tickets/chat.
   - All teammate/owner passwords were set directly via the admin API (no invite emails needed
     after the first one); credentials were emailed to each person via the CRM's own send-email
     function (the IT account's credentials were given directly to Claude by Omar in-session instead).
