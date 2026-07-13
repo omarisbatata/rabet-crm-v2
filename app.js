@@ -128,6 +128,31 @@ en: {
   compose_send: 'Send',
   compose_sent: 'Email sent.',
   send_failed: 'Send failed: ',
+  ai_draft_label: 'AI Draft',
+  ai_draft_btn: '✦ Draft with AI',
+  ai_draft_generate: 'Generate',
+  ai_draft_generating: 'Generating…',
+  ai_draft_copy: 'Copy',
+  ai_draft_copied: 'Copied to clipboard.',
+  ai_draft_failed: 'AI draft failed: ',
+  audit_pdf_btn: '📄 Generate Audit PDF',
+  audit_modal_title: 'Generate Audit PDF',
+  audit_lang_label: 'Audit Language',
+  audit_f_client: 'Client Name',
+  audit_f_date: 'Date',
+  audit_f_intro: 'Intro Line',
+  audit_fix_now: 'Fix Now — 6 items',
+  audit_what_to_add: 'What to Add — 5 items',
+  audit_bottom_line: 'Bottom Line',
+  audit_f_paragraph: 'Paragraph',
+  audit_f_priority: 'Priority',
+  audit_item_title: 'Title',
+  audit_item_body: 'Body',
+  audit_generate_btn: 'Generate PDF',
+  audit_generating: 'Generating…',
+  audit_pdf_saved: 'PDF downloaded.',
+  settings_prefile_catalog: '📋 Prefile Catalog →',
+  prefile_nav: '📁 Prefile',
   templates_nav: '✎ Templates',
   templates_empty: 'No templates yet.',
   template_new: '+ New Template',
@@ -234,6 +259,31 @@ ar: {
   compose_send: 'إرسال',
   compose_sent: 'تم إرسال البريد.',
   send_failed: 'فشل الإرسال: ',
+  ai_draft_label: 'مسودة بالذكاء الاصطناعي',
+  ai_draft_btn: '✦ مسودة بالذكاء الاصطناعي',
+  ai_draft_generate: 'إنشاء',
+  ai_draft_generating: 'جارٍ الإنشاء…',
+  ai_draft_copy: 'نسخ',
+  ai_draft_copied: 'تم النسخ.',
+  ai_draft_failed: 'فشل إنشاء المسودة: ',
+  audit_pdf_btn: '📄 إنشاء تقرير PDF',
+  audit_modal_title: 'إنشاء تقرير التدقيق PDF',
+  audit_lang_label: 'لغة التقرير',
+  audit_f_client: 'اسم العميل',
+  audit_f_date: 'التاريخ',
+  audit_f_intro: 'سطر المقدمة',
+  audit_fix_now: 'إصلاح الآن — 6 عناصر',
+  audit_what_to_add: 'ما يجب إضافته — 5 عناصر',
+  audit_bottom_line: 'الخلاصة',
+  audit_f_paragraph: 'الفقرة',
+  audit_f_priority: 'أولوية',
+  audit_item_title: 'العنوان',
+  audit_item_body: 'النص',
+  audit_generate_btn: 'إنشاء PDF',
+  audit_generating: 'جارٍ الإنشاء…',
+  audit_pdf_saved: 'تم تنزيل الملف.',
+  settings_prefile_catalog: '📋 كتالوج بريفايل ←',
+  prefile_nav: '📁 بريفايل',
   templates_nav: '✎ القوالب',
   templates_empty: 'لا توجد قوالب بعد.',
   template_new: '+ قالب جديد',
@@ -321,6 +371,8 @@ function isOwner() { return state.user?.role === 'owner' }
 function isViewer() { return state.user?.role === 'viewer' }
 function isAccountant() { return state.user?.role === 'accountant' }
 function isIT() { return state.user?.role === 'it' }
+function canUseAI() { return isOwner() || state.user?.role === 'teammate' }
+function isOwnerOrTeammate() { return isOwner() || state.user?.role === 'teammate' }
 function canSeeFinance() { return isOwner() || isAccountant() }
 function canSeeIT() { return isOwner() || isIT() }
 
@@ -418,7 +470,7 @@ async function bootApp() {
   applyLang()
   setupKeyboard()
   await loadCompanies()
-  if (isOwner()) await refreshInboxBadge()
+  if (MAILBOX_ENABLED && isOwner()) await refreshInboxBadge()
   await ensureLoginSession()
   startHeartbeatLoop()
   await loadMyShift()
@@ -427,7 +479,7 @@ async function bootApp() {
   // 3-person team needs) — poll for changes made by other team members instead.
   setInterval(() => {
     loadCompanies(true)
-    if (isOwner()) refreshInboxBadge()
+    if (MAILBOX_ENABLED && isOwner()) refreshInboxBadge()
     loadMyShift().then(renderShiftButton)
   }, 15000)
 }
@@ -601,6 +653,16 @@ async function sendEmailViaEdge({ to, subject, bodyText, threadId, companyId }) 
   if (error) return { ok: false, message: error.message }
   if (data && data.error) return { ok: false, message: data.error }
   return { ok: true }
+}
+
+// ── AI assist (shared ai-assist Edge Function) ──────────────────────────────
+async function draftEmailViaAI({ companyId, templateId }) {
+  const { data, error } = await sb.functions.invoke('ai-assist', {
+    body: { task: 'draft_email', context: { company_id: companyId, template_id: templateId || null } },
+  })
+  if (error) return { ok: false, message: error.message }
+  if (data && data.error) return { ok: false, message: data.error }
+  return { ok: true, subject: data?.subject || '', body: data?.body || '' }
 }
 
 // ── Inbox (unlinked emails) ──────────────────────────────────────────────────
@@ -1179,8 +1241,10 @@ function buildSidebar() {
   qs('#sb-user').textContent = state.user?.full_name || ''
   qs('#btn-add').classList.toggle('hidden', isViewer())
   qs('#btn-add').onclick      = () => showModal(null)
-  qs('#btn-inbox').classList.toggle('hidden', !isOwner())
+  qs('#btn-inbox').classList.toggle('hidden', !MAILBOX_ENABLED || !isOwner())
   qs('#btn-inbox').onclick    = showInbox
+  qs('#btn-prefile').classList.toggle('hidden', !isOwnerOrTeammate())
+  qs('#btn-prefile').onclick  = () => window.open('prefile.html', '_blank')
   qs('#btn-finance').classList.toggle('hidden', !canSeeFinance())
   qs('#btn-finance').onclick  = () => window.open('finance.html', '_blank')
   qs('#btn-dashboard').classList.toggle('hidden', !isOwner())
@@ -1369,6 +1433,30 @@ function showModal(company) {
         </div>
       </div>
     </div>` : ''}
+    ${company && canUseAI() ? `
+    <div class="field-group">
+      <div class="correspondence-header">
+        <label class="field-label">${t('ai_draft_label')}</label>
+        <button class="btn-ghost" id="btn-ai-draft-toggle" type="button" style="width:auto;padding:5px 12px;font-size:12px;">${t('ai_draft_btn')}</button>
+      </div>
+      <div id="ai-draft-box" class="ai-draft-box hidden">
+        <select class="field-select" id="ai-draft-template">
+          <option value="">${t('template_use')}</option>
+          ${state.templates.map(tpl => `<option value="${tpl.id}">${esc(tpl.category)} — ${esc(tpl.name)}</option>`).join('')}
+        </select>
+        <div class="ai-draft-actions">
+          <button class="btn-primary" id="ai-draft-generate-btn" type="button" style="width:auto;padding:9px 16px;">${t('ai_draft_generate')}</button>
+        </div>
+        <div id="ai-draft-result" class="ai-draft-result hidden">
+          <input class="field-input" id="ai-draft-subject" placeholder="${t('compose_subject')}" />
+          <textarea class="field-textarea" id="ai-draft-body" placeholder="${t('compose_body')}"></textarea>
+          <div class="reply-actions">
+            <button class="btn-ghost" id="ai-draft-copy-btn" type="button" style="width:auto;padding:9px 16px;">${t('ai_draft_copy')}</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-ghost" id="btn-audit-pdf" type="button" style="width:auto;padding:9px 16px;margin-top:10px;">${t('audit_pdf_btn')}</button>
+    </div>` : ''}
     <div class="modal-footer">
       <button class="btn-primary" id="btn-modal-save">${t('save')}</button>
       <button class="btn-ghost"   id="btn-modal-cancel">${t('cancel')}</button>
@@ -1465,6 +1553,33 @@ function showModal(company) {
       qs('#compose-box').classList.add('hidden')
       loadCompanyEmails(company.id)
     })
+  }
+
+  if (company && canUseAI()) {
+    qs('#btn-ai-draft-toggle').addEventListener('click', () => {
+      qs('#ai-draft-box').classList.toggle('hidden')
+    })
+
+    qs('#ai-draft-generate-btn').addEventListener('click', async () => {
+      const btn = qs('#ai-draft-generate-btn')
+      btn.disabled = true
+      btn.textContent = t('ai_draft_generating')
+      const templateId = qs('#ai-draft-template').value || undefined
+      const result = await draftEmailViaAI({ companyId: company.id, templateId })
+      btn.disabled = false
+      btn.textContent = t('ai_draft_generate')
+      if (!result.ok) { sbar(t('ai_draft_failed') + result.message); return }
+      qs('#ai-draft-subject').value = result.subject
+      qs('#ai-draft-body').value = result.body
+      qs('#ai-draft-result').classList.remove('hidden')
+    })
+
+    qs('#ai-draft-copy-btn').addEventListener('click', () => {
+      const text = `${qs('#ai-draft-subject').value}\n\n${qs('#ai-draft-body').value}`
+      navigator.clipboard.writeText(text).then(() => showToast(t('ai_draft_copied')))
+    })
+
+    qs('#btn-audit-pdf').addEventListener('click', () => openAuditModal(company))
   }
 }
 
@@ -1581,6 +1696,7 @@ function showSettings() {
   qs('#s-new-password').value     = ''
   qs('#s-confirm-password').value = ''
   qs('#settings-error').classList.add('hidden')
+  qs('#btn-settings-prefile-catalog').classList.toggle('hidden', !isOwner())
 }
 
 qs('#settings-close').addEventListener('click', () => qs('#settings-overlay').classList.add('hidden'))

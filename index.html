@@ -6,8 +6,12 @@
   <title>رابط CRM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Used only by the Audit PDF export template (audit.js), to match the brand identity used in client-facing PDFs -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -85,6 +89,7 @@
       </button>
       <button class="nav-btn" id="btn-templates" data-i18n="templates_nav"></button>
       <button class="nav-btn" id="btn-schedule" data-i18n="schedule_nav"></button>
+      <button class="nav-btn hidden" id="btn-prefile" data-i18n="prefile_nav"></button>
       <button class="nav-btn hidden" id="btn-finance" data-i18n="finance_nav"></button>
       <button class="nav-btn hidden" id="btn-dashboard" data-i18n="dashboard_nav"></button>
       <button class="nav-btn hidden" id="btn-it" data-i18n="it_nav"></button>
@@ -160,6 +165,9 @@
       <button class="modal-close" id="settings-close">✕</button>
     </div>
     <div class="modal-body">
+      <a class="btn-ghost hidden" id="btn-settings-prefile-catalog" href="prefile-catalog.html" target="_blank"
+         style="width:auto;padding:9px 16px;display:inline-block;text-decoration:none;margin-bottom:20px;"
+         data-i18n="settings_prefile_catalog"></a>
       <p class="field-label" data-i18n="settings_change_password"></p>
       <input type="password" id="s-new-password"     class="field-input" data-i18n-placeholder="settings_new" />
       <input type="password" id="s-confirm-password" class="field-input" data-i18n-placeholder="settings_confirm" />
@@ -208,6 +216,22 @@
   </div>
 </div>
 
+<!-- ── Audit PDF Modal ─────────────────────────────────────────────────────── -->
+<div id="audit-overlay" class="hidden">
+  <div class="modal-card audit-card">
+    <div class="modal-header">
+      <span data-i18n="audit_modal_title"></span>
+      <button class="modal-close" id="audit-close">✕</button>
+    </div>
+    <div class="modal-body" id="audit-body"></div>
+  </div>
+</div>
+
+<!-- Off-screen render target for the Audit PDF export (audit.js). Not
+     display:none — html2canvas can't rasterize elements that aren't laid
+     out — positioned off the visible viewport instead. -->
+<div id="audit-render-root" aria-hidden="true"></div>
+
 <!-- ── Context Menu ───────────────────────────────────────────────────────── -->
 <div id="ctx-menu" class="hidden"></div>
 
@@ -216,5 +240,6 @@
 
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="audit.js"></script>
 </body>
 </html>

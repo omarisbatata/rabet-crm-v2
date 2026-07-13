@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prefile — رابط CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Used only by the Prefile PDF export template (prefile-render.js), to match the brand identity used in client-facing PDFs -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<div id="dashboard-page">
+  <div class="finance-page-header">
+    <div class="finance-page-title" id="pf-title"></div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="nav-btn-dim" id="btn-pf-lang" style="background:none;border:none;"></button>
+      <a class="btn-ghost" id="btn-pf-back" href="index.html" style="width:auto;padding:8px 14px;text-decoration:none;display:inline-block;"></a>
+    </div>
+  </div>
+
+  <div class="finance-page-status" id="pf-status"></div>
+
+  <div id="pf-page-body" class="hidden">
+    <div id="pf-body"></div>
+  </div>
+</div>
+
+<!-- Off-screen render target for the Prefile PDF export (prefile-render.js).
+     Not display:none — html2canvas can't rasterize elements that aren't
+     laid out — positioned off the visible viewport instead. -->
+<div id="pf-render-root" aria-hidden="true"></div>
+
+<script src="config.js"></script>
+<script src="prefile-render.js"></script>
+<script src="prefile.js"></script>
+</body>
+</html>

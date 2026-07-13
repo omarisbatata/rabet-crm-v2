@@ -360,7 +360,7 @@ tbody td.col-status { white-space: nowrap; }
 #sbar-msg { font-size: 12px; color: var(--muted); }
 
 /* ── Modal ──────────────────────────────────────────────────────────────────── */
-#modal-overlay, #settings-overlay, #templates-overlay, #view-overlay, #schedule-overlay {
+#modal-overlay, #settings-overlay, #templates-overlay, #view-overlay, #schedule-overlay, #audit-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,.65);
   display: flex; align-items: center; justify-content: center;
@@ -542,6 +542,11 @@ tbody td.col-status { white-space: nowrap; }
 .compose-box { margin-top: 10px; }
 .compose-box .field-input, .compose-box .field-textarea { margin-bottom: 8px; }
 .compose-box .field-textarea { min-height: 90px; }
+
+.ai-draft-box { margin-top: 10px; }
+.ai-draft-actions { display: flex; justify-content: flex-end; margin: 10px 0; }
+.ai-draft-result .field-input, .ai-draft-result .field-textarea { margin-bottom: 8px; }
+.ai-draft-result .field-textarea { min-height: 90px; }
 
 /* ── Company View Overlay (read-only) ──────────────────────────────────── */
 .view-card { width: 460px; }
@@ -820,4 +825,278 @@ tbody td.col-status { white-space: nowrap; }
 [dir="rtl"] tbody td { text-align: right; }
 [dir="rtl"] tbody tr.overdue td:first-child { border-left: none; border-right: 2px solid var(--warn); }
 [dir="rtl"] .sb-logo-ar { font-size: 28px; }
+
+/* ── Audit PDF — editor modal (CRM dark theme, matches Templates/Schedule) ─── */
+.audit-card { width: 720px; max-width: 96vw; }
+.audit-lang-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+.audit-section { margin: 22px 0 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.audit-section-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.audit-item-row {
+  display: grid; grid-template-columns: 28px 1fr; gap: 10px;
+  padding: 10px 0 10px 0; border-bottom: 1px dashed var(--border);
+}
+.audit-item-row:last-child { border-bottom: none; }
+.audit-item-num {
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--accent2);
+  padding-top: 9px;
+}
+.audit-item-row .field-input, .audit-item-row .field-textarea { margin-bottom: 8px; }
+.audit-item-row .field-textarea { min-height: 60px; }
+.audit-priority-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.audit-priority-row .audit-item-num { padding-top: 0; }
+.audit-priority-row .field-input { margin-bottom: 0; flex: 1; }
+.audit-modal-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+.audit-modal-actions-left, .audit-modal-actions-right { display: flex; gap: 10px; }
+
+/* ── Audit PDF — export render template (brand identity, not CRM theme) ──── */
+/* Off-screen, not display:none — html2canvas needs real layout to rasterize. */
+#audit-render-root {
+  position: fixed; top: 0; left: -99999px; z-index: -1;
+}
+.audit-page {
+  width: 794px; height: 1123px; /* A4 @ 96dpi */
+  overflow: hidden; position: relative;
+  font-family: 'IBM Plex Sans', sans-serif;
+  box-sizing: border-box;
+}
+.audit-page[dir="rtl"] { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+.audit-mono { font-family: 'IBM Plex Mono', monospace; }
+
+.audit-page-cover {
+  background: #141312; color: #F4F1EA;
+  padding: 48px 56px; display: flex; flex-direction: column;
+}
+.audit-cover-meta {
+  display: flex; justify-content: space-between;
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #79746B;
+}
+.audit-cover-center {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+.audit-cover-mark {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 1.5px solid #FF4D2E; background: #141312;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 22px;
+  color: #F4F1EA; margin-bottom: 28px;
+}
+.audit-cover-title { font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #BFEDE5; margin-bottom: 18px; }
+.audit-cover-client { font-size: 44px; font-weight: 700; letter-spacing: -.01em; max-width: 20ch; margin-bottom: 26px; }
+.audit-cover-pill {
+  display: inline-block; padding: 8px 20px; border-radius: 40px;
+  border: 1px solid #FF4D2E; color: #FF4D2E;
+  font-size: 12px; letter-spacing: .05em; margin-bottom: 22px;
+}
+.audit-cover-prepared { font-size: 13px; color: #79746B; max-width: 40ch; }
+.audit-cover-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid rgba(244,241,234,.12); padding-top: 20px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #79746B;
+}
+.audit-cover-footer strong { color: #F4F1EA; }
+
+.audit-page-content {
+  background: #F4F1EA; color: #141312;
+  padding: 48px 56px; display: flex; flex-direction: column;
+}
+.audit-content-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #79746B;
+  padding-bottom: 16px; border-bottom: 1px solid rgba(20,19,18,.12); margin-bottom: 24px;
+}
+.audit-content-header strong { color: #141312; }
+.audit-intro { font-size: 14px; line-height: 1.7; color: #141312; margin-bottom: 26px; max-width: 62ch; }
+.audit-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: #FF4D2E; margin-bottom: 10px;
+}
+.audit-tag::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #0FB5A1; }
+.audit-heading { font-size: 22px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 20px; }
+.audit-items { display: flex; flex-direction: column; gap: 16px; }
+.audit-item { display: flex; gap: 16px; }
+[dir="rtl"] .audit-item { flex-direction: row-reverse; }
+.audit-item-index {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid #FF4D2E; color: #FF4D2E;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+}
+.audit-item-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.audit-item-body { font-size: 12.5px; line-height: 1.6; color: #79746B; }
+.audit-bottomline {
+  margin-top: auto; background: #07312B; color: #F4F1EA;
+  border-radius: 6px; padding: 24px 28px;
+}
+.audit-bottomline .audit-tag { color: #BFEDE5; }
+.audit-bottomline .audit-tag::before { background: #FF4D2E; }
+.audit-bottomline p { font-size: 13px; line-height: 1.7; color: #F4F1EA; margin-bottom: 16px; max-width: 68ch; }
+.audit-priorities { display: flex; flex-direction: column; gap: 8px; }
+.audit-priority { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; color: #BFEDE5; }
+[dir="rtl"] .audit-priority { flex-direction: row-reverse; }
+.audit-priority-index { font-family: 'IBM Plex Mono', monospace; color: #0FB5A1; font-weight: 600; }
+.audit-content-footer {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(20,19,18,.12);
+  font-size: 11px; color: #79746B; text-align: center;
+}
+
+/* ── Prefile Catalog admin page ────────────────────────────────────────── */
+.pc-lane-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); padding: 16px 18px; margin-bottom: 18px;
+}
+.pc-lane-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 12px; }
+.pc-category-block { margin-bottom: 16px; }
+.pc-category-block:last-child { margin-bottom: 0; }
+.pc-category-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.pc-category-header .pc-add-btn { width: auto; padding: 4px 10px; font-size: 11px; }
+.pc-item-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.pc-item-row:last-child { border-bottom: none; }
+.pc-item-reorder { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.pc-item-reorder button {
+  background: none; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--muted); font-size: 9px; padding: 1px 5px; line-height: 1.5;
+}
+.pc-item-reorder button:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.pc-item-reorder button:disabled { opacity: .3; cursor: default; }
+.pc-item-content { flex: 1; min-width: 0; }
+.pc-item-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.pc-item-price { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent2); font-weight: 500; }
+.pc-item-body { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+.pc-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.pc-item-actions button { background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+.pc-item-actions button:hover { color: var(--text); }
+.pc-item-form { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.pc-item-form .field-input, .pc-item-form .field-textarea { margin-bottom: 8px; }
+.pc-item-form .modal-footer { padding-top: 0; border-top: none; margin-top: 4px; }
+
+/* ── Prefile generator page ────────────────────────────────────────────── */
+.pf-step { margin-bottom: 24px; }
+.pf-step-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 10px;
+}
+.pf-company-search { position: relative; }
+.pf-company-results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  max-height: 220px; overflow-y: auto;
+}
+.pf-company-result { padding: 9px 12px; font-size: 13px; cursor: pointer; }
+.pf-company-result:hover { background: var(--surf2); }
+.pf-company-selected {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: var(--surface); border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm); font-size: 13px;
+}
+.pf-company-selected button { background: none; border: none; color: var(--muted); font-size: 12px; }
+.pf-doctype-pills, .pf-lane-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.pf-checklist-group { margin-bottom: 18px; }
+.pf-checklist-group:last-child { margin-bottom: 0; }
+.pf-checklist-group-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.pf-check-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.pf-check-row:last-child { border-bottom: none; }
+.pf-check-row input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+.pf-check-row-content { flex: 1; min-width: 0; }
+.pf-check-row-title { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.pf-check-row-body { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+.pf-lane-tag {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.pf-lane-tag.lane-web   { background: #F84828; }
+.pf-lane-tag.lane-social { background: #08B0A0; }
+.pf-lane-tag.lane-video { background: #0C3A30; border: 1px solid #08B0A0; }
+.pf-generate-bar {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
+}
+
+/* ── Prefile PDF export render template (brand identity, not CRM theme) ──── */
+/* Palette: Ink #101010, Paper #F0F0E8, lane accents Signal #F84828 (web) /
+   Link #08B0A0 (social) / Forest #0C3A30 (video) — reuses .pf-lane-tag.lane-*
+   from the wizard checklist above so the dot color always matches. */
+#pf-render-root { position: fixed; top: 0; left: -99999px; z-index: -1; }
+.pf-pdf-page {
+  width: 794px; height: 1123px; overflow: hidden; position: relative;
+  font-family: 'IBM Plex Sans', sans-serif; box-sizing: border-box;
+}
+.pf-pdf-page[dir="rtl"] { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+.pf-pdf-mono { font-family: 'IBM Plex Mono', monospace; }
+
+.pf-pdf-cover { background: #101010; color: #F0F0E8; padding: 48px 56px; display: flex; flex-direction: column; }
+.pf-pdf-cover-meta { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #8A8A82; }
+.pf-pdf-cover-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.pf-pdf-cover-mark {
+  width: 64px; height: 64px; border-radius: 50%; border: 1.5px solid #F84828; background: #101010;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Sans Arabic', sans-serif; font-weight: 700; font-size: 22px;
+  color: #F0F0E8; margin-bottom: 28px;
+}
+.pf-pdf-cover-title { font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #F0F0E8; opacity: .7; margin-bottom: 18px; }
+.pf-pdf-cover-client { font-size: 44px; font-weight: 700; letter-spacing: -.01em; max-width: 20ch; margin-bottom: 26px; }
+.pf-pdf-cover-pill { display: inline-block; padding: 8px 20px; border-radius: 40px; border: 1px solid #F84828; color: #F84828; font-size: 12px; letter-spacing: .05em; margin-bottom: 22px; }
+.pf-pdf-cover-sub { font-size: 13px; color: #8A8A82; max-width: 44ch; }
+.pf-pdf-cover-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid rgba(240,240,232,.12); padding-top: 20px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8A8A82;
+}
+.pf-pdf-cover-footer strong { color: #F0F0E8; }
+
+.pf-pdf-content { background: #F0F0E8; color: #101010; padding: 48px 56px; display: flex; flex-direction: column; }
+.pf-pdf-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8A8A82;
+  padding-bottom: 16px; border-bottom: 1px solid rgba(16,16,16,.12); margin-bottom: 20px;
+}
+.pf-pdf-header strong { color: #101010; }
+.pf-pdf-intro { font-size: 14px; line-height: 1.7; color: #101010; margin-bottom: 22px; max-width: 62ch; }
+.pf-pdf-tag { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #101010; margin-bottom: 6px; }
+.pf-pdf-heading { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid rgba(16,16,16,.12); }
+.pf-pdf-continued { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8A8A82; margin-bottom: 16px; }
+.pf-pdf-items { display: flex; flex-direction: column; gap: 16px; }
+.pf-pdf-item { display: flex; gap: 14px; }
+[dir="rtl"] .pf-pdf-item { flex-direction: row-reverse; }
+.pf-pdf-item-index {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  border: 1.5px solid #101010; color: #101010;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600;
+}
+.pf-pdf-item-title { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
+[dir="rtl"] .pf-pdf-item-title { flex-direction: row-reverse; }
+.pf-pdf-item-body { font-size: 12px; line-height: 1.6; color: #5A5A54; }
+.pf-pdf-item-price { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+
+.pf-pdf-bottomline { margin-top: 8px; background: #101010; color: #F0F0E8; border-radius: 6px; padding: 26px 30px; }
+.pf-pdf-bottomline .pf-pdf-tag { color: #F84828; }
+.pf-pdf-bottomline p { font-size: 13px; line-height: 1.7; color: #F0F0E8; margin-bottom: 16px; max-width: 68ch; }
+.pf-pdf-priorities { display: flex; flex-direction: column; gap: 8px; }
+.pf-pdf-priority { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; color: #F0F0E8; }
+[dir="rtl"] .pf-pdf-priority { flex-direction: row-reverse; }
+.pf-pdf-priority-index { font-family: 'IBM Plex Mono', monospace; color: #F84828; font-weight: 600; }
+
+.pf-pdf-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(16,16,16,.12); font-size: 11px; color: #5A5A54; text-align: center; }
+
+.pf-pdf-closing { background: #101010; color: #F0F0E8; padding: 48px 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.pf-pdf-closing-title { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
+.pf-pdf-closing-sub { font-size: 14px; color: #8A8A82; max-width: 44ch; margin-bottom: 34px; line-height: 1.6; }
+.pf-pdf-closing-contact { font-size: 12px; color: #F0F0E8; font-family: 'IBM Plex Mono', monospace; }
+
+.pf-pdf-lane-pill {
+  display: inline-flex; align-items: center; gap: 8px; width: fit-content;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  padding: 7px 16px; border-radius: 40px; margin-bottom: 20px;
+}
 [dir="rtl"] .name-pill { text-align: right; }

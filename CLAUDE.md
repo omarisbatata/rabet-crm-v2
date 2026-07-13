@@ -151,6 +151,87 @@ Everything below is built, deployed, and verified — this isn't a plan, it's wh
 - **Known deviation from the original stack line below:** actually hosted on GitHub Pages, not
   Vercel — Cloudflare/Vercel were never wired up. Update this if that changes.
 
+### Built, not yet deployed — AI assist + audit PDF generator
+
+Unlike everything above, the pieces below are written but **not yet deployed/verified live** —
+no `supabase` CLI and no `ANTHROPIC_API_KEY` were available in the sandbox that built them.
+
+- **Mailbox hidden behind a flag:** `MAILBOX_ENABLED = false` in `config.js` hides the Inbox nav
+  entry/badge in `app.js` (`bootApp`'s `refreshInboxBadge` calls are gated the same way). Backend
+  (`emails` table, the 15-min inbound sync cron, the `send-email` function) is untouched — flip
+  the flag back to `true` to bring the nav entry back, no other change needed.
+- **`supabase/functions/ai-assist/index.ts`** — new shared Edge Function, same JWT-forwarding auth
+  pattern as `send-email`, plus an explicit `profiles.role` check (owner/teammate only — everyone
+  else gets a 403, on top of the frontend hiding the buttons). Body is `{ task, context }`; a
+  `switch(task)` currently handles `draft_email` and `draft_audit`, calling the Anthropic Messages
+  API (`model: "claude-sonnet-5"`). Adding a future task (company notes, summaries, ticket triage)
+  is a new `case` + handler function, not a new Edge Function. **Deploy:**
+  `supabase functions deploy ai-assist`, then `supabase secrets set ANTHROPIC_API_KEY=...`.
+- **AI email draft panel** (company edit modal, `app.js`'s `showModal`) — "Draft with AI" button,
+  optional template picker, calls `ai-assist` (`draft_email`) and shows the result in an editable
+  subject/body pair with a Copy-to-clipboard button. Deliberately **not** wired into the existing
+  Correspondence/Compose section — no send path, copy-paste only. Gated to owner/teammate via
+  `canUseAI()`.
+- **Audit PDF generator** (`audit.js`, triggered from the same company modal) — form mirrors the
+  existing Haseeb Coffee reference audit exactly (client name, date, intro line, 6 Fix Now items,
+  5 What to Add items, Bottom Line paragraph + 3 priorities, EN/AR toggle for the *document's*
+  language, independent of the CRM's own UI language). "Draft with AI" calls `ai-assist`
+  (`draft_audit`) to prefill every field from the company record — still fully editable before
+  export, same "AI drafts, human confirms" rule as the email panel. "Generate PDF" renders a
+  hidden 3-page template (`#audit-render-root` in `index.html`, styled in style.css's "Audit PDF —
+  export render template" block using the brand palette — Ink `#141312` / Paper `#F4F1EA` /
+  Signal `#FF4D2E` / Link `#0FB5A1` / Forest `#07312B` / Mist `#BFEDE5` / Stone `#79746B` — and
+  IBM Plex Sans/Sans Arabic/Mono) with `html2canvas`, assembles the pages with `jsPDF`, and
+  triggers `.save()`. Fully client-side, both libraries loaded from CDN in `index.html` — no
+  server rendering, no PDF API, no added cost.
+- **Price list PDF** — superseded by Prefile below; no longer separately out of scope.
+
+### Prefile (catalog-driven document generator, no AI) — schema live, frontend not yet pushed
+
+Separate from the AI-assist work above and has **zero dependency on it** — no calls to `ai-assist`,
+no `ANTHROPIC_API_KEY` reference anywhere in this feature.
+
+- **`supabase/migrations/0011_prefile_catalog.sql`** — new `prefile_catalog` table: `doc_type`
+  (`audit`/`price_list`), `category` (`issue`/`recommendation`/`tier`, constrained to match
+  `doc_type`), `lane` (`web`/`social`/`video`), `title`, `body`, `price` (tier rows only),
+  `sort_order`. RLS: owner+teammate select, owner-only write (insert/update/delete) — same split as
+  `it_assets`. **Applied and verified live** via the Management API (same path as `0005`–`0010`):
+  RLS enabled, all 4 policies present, seed row counts confirmed — 6/5/5 issues and 5/4/4
+  recommendations per web/social/video, 5/3/4 tiers per web/social/video. Seeded with the Haseeb
+  Coffee audit's Web issues verbatim, generalized Web recommendations, new Social/Video
+  issues+recommendations, and Web/Social/Video price tiers.
+  **The price tier body copy is a placeholder** — `rabet-price-list.pdf` and its build script
+  weren't available in the sandbox that wrote this, so the tier descriptions were written fresh
+  from the given price ranges. Review/replace via Settings → Prefile Catalog before this goes out
+  to a real client.
+- **`prefile-catalog.html` + `.js`** — owner-only standalone page (same redirect-gate pattern as
+  `it.html`), linked from the Settings modal (`#btn-settings-prefile-catalog`, gated to
+  `isOwner()`). Add/edit/delete/reorder (up/down, swaps `sort_order`) catalog rows, grouped by lane
+  → category, tabbed by `doc_type`. This is the only place catalog content is edited.
+- **`prefile.html` + `.js`** — owner+teammate standalone page (`#btn-prefile` sidebar nav entry,
+  gated to `isOwnerOrTeammate()`), the generator wizard: company search/select → doc type
+  (Audit/Price List) → lane multi-select chips (1–3 of web/social/video) → catalog checklist
+  (filtered to the selection, all checked by default, no free-text fields anywhere) → Generate.
+  For Audit, the checklist is one combined issues list + one combined recommendations list (not
+  split per lane); for Price List it's grouped by lane, previewing the page structure.
+- **`prefile-render.js`** — the two document templates, same plain-JS-template + `html2canvas` +
+  `jsPDF` approach as `audit.js` (see that entry above for why not React). Palette here is
+  Prefile's own: Ink `#101010` / Paper `#F0F0E8`, with lane accents Signal `#F84828` (web) / Link
+  `#08B0A0` (social) / Forest `#0C3A30` (video) — distinct from the older single-tenant Haseeb
+  audit palette used by `audit.js`, per this feature's own spec.
+  - **Audit**: cover → paginated Issues page(s) → paginated Recommendations page(s) → one Bottom
+    Line page. Each item shows a small lane-colored dot (`.pf-lane-tag`, shared with the wizard
+    checklist so the color always matches). Intro paragraph is static boilerplate. Bottom Line
+    paragraph + 3 priorities are auto-composed from the checked issues (paragraph references which
+    lanes were audited and how many issues were found; the 3 priorities are the first 3 checked
+    issues in checklist order) — no free text.
+  - **Price List**: cover → one page per *selected* lane (skipped entirely if a lane wasn't picked
+    or has zero checked tiers) → closing page. Each lane page only lists its checked tiers.
+  - **Pagination**: since checklist counts vary (unlike `audit.js`'s fixed 6+5), content pages are
+    built by actually measuring item heights in a hidden DOM container (`paginateItems()` in
+    `prefile-render.js`) against a fixed page budget, rather than assuming a fixed item count —
+    overflow spills onto a "continued" page automatically.
+
 ---
 
 Full rebuild of `rabet-crm-web` (old repo + old Supabase project `uirdvnhafmuqtcsobyhr` are both
